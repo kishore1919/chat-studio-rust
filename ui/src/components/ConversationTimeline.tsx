@@ -7,86 +7,59 @@ interface ConversationTimelineProps {
   activeMessageId?: number | null
 }
 
-interface MessageTurn {
-  userMessage: Message
-  assistantMessage?: Message
-}
-
 export function ConversationTimeline({
   messages,
   onScrollToMessage,
 }: ConversationTimelineProps) {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null)
 
-  // Group messages into (User Prompt, Assistant Response) turns
-  const turns = useMemo(() => {
-    const list: MessageTurn[] = []
-    for (let i = 0; i < messages.length; i++) {
-      if (messages[i].role === 'user') {
-        const userMessage = messages[i]
-        const nextMsg = messages[i + 1]
-        const assistantMessage = nextMsg?.role === 'assistant' ? nextMsg : undefined
-        list.push({ userMessage, assistantMessage })
-      }
-    }
-    return list
+  // Extract all user input messages
+  const userMessages = useMemo(() => {
+    return messages.filter((m) => m.role === 'user')
   }, [messages])
 
-  if (turns.length === 0) return null
+  if (userMessages.length === 0) return null
 
   return (
     <div className="absolute right-3.5 top-1/2 -translate-y-1/2 z-40 flex flex-col items-end gap-1.5 select-none pointer-events-auto">
-      {turns.map((turn, index) => {
+      {userMessages.map((msg, index) => {
         const isHovered = hoveredIndex === index
-
-        // Clean text previews
-        const userPreview = turn.userMessage.content.trim().split('\n')[0] || 'Prompt'
-        const assistantRaw = turn.assistantMessage?.content?.trim() || ''
-        const assistantClean = assistantRaw
-          .replace(/<think>[\s\S]*?<\/think>/gi, '')
-          .replace(/%%TOOL_CALL_\d+%%/g, '')
-          .trim()
-        const assistantPreview =
-          assistantClean.split('\n')[0] || (turn.assistantMessage ? '...' : '')
+        const promptText = msg.content.trim()
 
         return (
           <div
-            key={turn.userMessage.id}
+            key={msg.id}
             className="relative flex items-center justify-end"
             onMouseEnter={() => setHoveredIndex(index)}
             onMouseLeave={() => setHoveredIndex(null)}
           >
-            {/* Floating Preview Card on Hover */}
+            {/* Floating Preview Card: Shows only the User Message */}
             {isHovered && (
               <div
                 onMouseDown={(e) => {
                   e.preventDefault()
                   e.stopPropagation()
-                  onScrollToMessage(turn.userMessage.id)
+                  onScrollToMessage(msg.id)
                 }}
-                className="absolute right-8 top-1/2 -translate-y-1/2 z-50 w-64 rounded-xl border border-border/90 bg-[#1b1c24]/98 p-3 text-left shadow-2xl backdrop-blur-xl transition-all animate-in fade-in zoom-in-95 cursor-pointer pointer-events-auto"
+                className="absolute right-8 top-1/2 -translate-y-1/2 z-50 w-60 rounded-xl border border-border/90 bg-[#1b1c24]/98 p-3 text-left shadow-2xl backdrop-blur-xl transition-all animate-in fade-in zoom-in-95 cursor-pointer pointer-events-auto"
               >
-                <div className="font-semibold text-[12.5px] text-white line-clamp-2 leading-snug">
-                  {userPreview}
+                <div className="font-semibold text-[12.5px] text-white line-clamp-4 leading-snug whitespace-pre-wrap break-words">
+                  {promptText}
                 </div>
-                {assistantPreview && (
-                  <div className="mt-1 text-[11.5px] text-neutral-400 line-clamp-3 leading-relaxed">
-                    {assistantPreview}
-                  </div>
-                )}
-                <div className="mt-1.5 text-right font-mono text-[9.5px] text-primary/90 font-medium">
-                  Click to jump ↵
+                <div className="mt-2 flex items-center justify-between font-mono text-[9.5px] text-neutral-400">
+                  <span>Input #{index + 1}</span>
+                  <span className="text-primary/90 font-medium">Click to jump ↵</span>
                 </div>
               </div>
             )}
 
-            {/* Clickable Dash Button (no native title tooltip to prevent native overlap) */}
+            {/* Clickable Dash Button */}
             <button
               type="button"
               onMouseDown={(e) => {
                 e.preventDefault()
                 e.stopPropagation()
-                onScrollToMessage(turn.userMessage.id)
+                onScrollToMessage(msg.id)
               }}
               className="flex h-5 w-7 items-center justify-end pr-0.5 cursor-pointer group/btn"
             >
