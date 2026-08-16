@@ -1,5 +1,16 @@
 import { useState, type KeyboardEvent } from 'react'
-import { CheckIcon, EraserIcon, MenuIcon, PencilIcon, SettingsIcon, SparklesIcon } from 'lucide-react'
+import {
+  BotIcon,
+  BrainIcon,
+  CheckIcon,
+  CodeIcon,
+  EraserIcon,
+  MenuIcon,
+  PencilIcon,
+  SearchIcon,
+  SettingsIcon,
+  SparklesIcon,
+} from 'lucide-react'
 import { useChatStore } from '../store/chat'
 import { useSettingsStore } from '../store/settings'
 import { Button } from '@/components/ui/button'
@@ -30,12 +41,29 @@ interface ChatHeaderProps {
 const CUSTOM_MODEL_VALUE = '__custom__'
 const VALUE_SEP = ':::'
 
+function getAgentIcon(icon: string) {
+  switch (icon) {
+    case 'code':
+      return <CodeIcon className="size-3.5 text-primary shrink-0" />
+    case 'search':
+      return <SearchIcon className="size-3.5 text-primary shrink-0" />
+    case 'brain':
+      return <BrainIcon className="size-3.5 text-primary shrink-0" />
+    case 'sparkles':
+      return <SparklesIcon className="size-3.5 text-primary shrink-0" />
+    default:
+      return <BotIcon className="size-3.5 text-primary shrink-0" />
+  }
+}
+
 export function ChatHeader({ onToggleSidebar, onOpenSettings }: ChatHeaderProps) {
   const activeConversationId = useChatStore((s) => s.activeConversationId)
   const conversations = useChatStore((s) => s.conversations)
   const setConversationModel = useChatStore((s) => s.setConversationModel)
   const renameConversation = useChatStore((s) => s.renameConversation)
   const clearConversation = useChatStore((s) => s.clearConversation)
+  const activeAgentId = useChatStore((s) => s.activeAgentId)
+  const setActiveAgentId = useChatStore((s) => s.setActiveAgentId)
   const settings = useSettingsStore((s) => s.settings)
   const modelsByProvider = useSettingsStore((s) => s.modelsByProvider)
   const refreshModels = useSettingsStore((s) => s.refreshModels)
@@ -49,6 +77,21 @@ export function ChatHeader({ onToggleSidebar, onOpenSettings }: ChatHeaderProps)
   const [draftTitle, setDraftTitle] = useState('')
 
   const [confirmClear, setConfirmClear] = useState(false)
+
+  const agents = settings?.agents?.filter((a) => a.enabled) ?? []
+  const currentAgent = agents.find((a) => a.id === activeAgentId) ?? agents[0]
+
+  const handleAgentSelect = (agentId: string) => {
+    if (agentId === '__manage__') {
+      onOpenSettings()
+      return
+    }
+    setActiveAgentId(agentId)
+    const agent = agents.find((a) => a.id === agentId)
+    if (agent && agent.provider && agent.model && active) {
+      setConversationModel(active.id, agent.provider, agent.model)
+    }
+  }
 
   const startEditingModel = () => {
     if (!active) return
@@ -114,7 +157,7 @@ export function ChatHeader({ onToggleSidebar, onOpenSettings }: ChatHeaderProps)
           <MenuIcon className="size-4" />
         </Button>
 
-        <div className="flex items-center gap-2 text-[13px] min-w-0">
+        <div className="flex items-center gap-1.5 text-[13px] min-w-0">
           {/* Editable Chat Heading */}
           {active && editingTitle ? (
             <div className="flex items-center gap-1">
@@ -134,7 +177,7 @@ export function ChatHeader({ onToggleSidebar, onOpenSettings }: ChatHeaderProps)
             <button
               type="button"
               onClick={startEditingTitle}
-              className="group flex max-w-56 items-center gap-1 text-left font-semibold text-foreground hover:text-primary transition-colors cursor-pointer"
+              className="group flex max-w-44 items-center gap-1 text-left font-semibold text-foreground hover:text-primary transition-colors cursor-pointer"
               title="Click to rename chat heading"
             >
               <span className="truncate">{active?.title || 'Chat Studio'}</span>
@@ -144,6 +187,46 @@ export function ChatHeader({ onToggleSidebar, onOpenSettings }: ChatHeaderProps)
             </button>
           )}
 
+          {/* Assistant Selector */}
+          <div className="flex items-center">
+            <span className="mx-1 text-muted-foreground/60">·</span>
+            <Select
+              value={currentAgent?.id ?? 'general-assistant'}
+              onValueChange={handleAgentSelect}
+            >
+              <SelectTrigger
+                size="sm"
+                className="h-7 max-w-44 border-0 bg-accent/40 px-2 shadow-none hover:bg-accent text-xs font-medium rounded-md"
+              >
+                <span className="flex items-center gap-1.5 truncate">
+                  {getAgentIcon(currentAgent?.icon ?? 'bot')}
+                  <span className="truncate">{currentAgent?.name ?? 'Assistant'}</span>
+                </span>
+              </SelectTrigger>
+              <SelectContent className="max-h-80 max-w-64">
+                <SelectGroup>
+                  <SelectLabel className="font-semibold text-xs">Assistants & Agents</SelectLabel>
+                  {agents.map((agent) => (
+                    <SelectItem key={agent.id} value={agent.id}>
+                      <div className="flex items-center gap-2">
+                        {getAgentIcon(agent.icon)}
+                        <div className="flex flex-col text-left">
+                          <span className="font-medium text-xs">{agent.name}</span>
+                          <span className="text-[10px] text-muted-foreground">{agent.role}</span>
+                        </div>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+                <SelectSeparator />
+                <SelectItem value="__manage__" className="text-xs text-primary font-medium">
+                  + Manage Assistants in Settings...
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Model Selector */}
           {active && !editingModel && (
             <div className="flex items-center">
               <span className="mx-1 text-muted-foreground/60">·</span>
@@ -159,7 +242,7 @@ export function ChatHeader({ onToggleSidebar, onOpenSettings }: ChatHeaderProps)
               >
                 <SelectTrigger
                   size="sm"
-                  className="h-7 max-w-64 border-0 bg-transparent px-1.5 shadow-none hover:bg-accent/50 text-xs"
+                  className="h-7 max-w-56 border-0 bg-transparent px-1.5 shadow-none hover:bg-accent/50 text-xs"
                 >
                   <span className="flex items-center gap-1 truncate">
                     <SparklesIcon className="size-3 text-primary shrink-0" />

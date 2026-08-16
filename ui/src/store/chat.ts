@@ -17,11 +17,9 @@ interface ChatState {
   activeConversationId: number | null
   messagesByConversation: Record<number, Message[]>
   hasMoreByConversation: Record<number, boolean>
-  // Kept as its own top-level key so updating it during a stream never
-  // changes the `messagesByConversation` reference - components that select
-  // only settled messages don't re-render on every token flush.
   streaming: StreamingState | null
   error: string | null
+  activeAgentId: string | null
 
   loadConversations: () => Promise<void>
   selectConversation: (id: number) => Promise<void>
@@ -31,6 +29,7 @@ interface ChatState {
   pinConversation: (id: number, pinned: boolean) => Promise<void>
   clearConversation: (id: number) => Promise<void>
   setConversationModel: (id: number, provider: string, model: string) => Promise<void>
+  setActiveAgentId: (agentId: string | null) => void
   editMessage: (message: Message, content: string) => Promise<void>
   deleteMessage: (message: Message) => Promise<void>
   deleteConversation: (id: number) => Promise<void>
@@ -47,6 +46,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
   hasMoreByConversation: {},
   streaming: null,
   error: null,
+  activeAgentId: 'general-assistant',
+
+  setActiveAgentId: (activeAgentId) => set({ activeAgentId }),
 
   loadConversations: async () => {
     const conversations = await ipc.listConversations()
