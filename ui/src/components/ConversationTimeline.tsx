@@ -36,9 +36,9 @@ export function ConversationTimeline({
   if (turns.length === 0) return null
 
   return (
-    <div className="group/timeline pointer-events-none absolute right-0 top-0 bottom-0 z-30 flex w-12 items-center justify-end pr-2 select-none">
-      {/* Vertical line indicator track (minimalist as in screenshot) */}
-      <div className="pointer-events-auto flex flex-col items-end gap-3 py-6 px-1 opacity-40 transition-opacity duration-200 group-hover/timeline:opacity-100">
+    <div className="group/timeline pointer-events-none absolute right-0 top-0 bottom-0 z-30 flex w-8 items-center justify-end pr-1 select-none">
+      {/* Small, ultra-subtle vertical dash rail */}
+      <div className="pointer-events-auto flex flex-col items-end gap-1.5 py-4 px-0.5 opacity-20 transition-opacity duration-300 group-hover/timeline:opacity-90">
         {turns.map((turn, index) => {
           const isHovered = hoveredIndex === index
           const isCurrent =
@@ -46,7 +46,7 @@ export function ConversationTimeline({
             activeMessageId === turn.assistantMessage?.id ||
             (activeMessageId == null && index === turns.length - 1)
 
-          // Clean text previews matching exact screenshot
+          // Clean text previews
           const userPreview = turn.userMessage.content.trim().split('\n')[0] || 'Prompt'
           const assistantRaw = turn.assistantMessage?.content?.trim() || ''
           const assistantClean = assistantRaw
@@ -59,35 +59,35 @@ export function ConversationTimeline({
           return (
             <div
               key={turn.userMessage.id}
-              className="relative flex items-center justify-end"
+              className="relative flex items-center justify-end py-0.5"
               onMouseEnter={() => setHoveredIndex(index)}
               onMouseLeave={() => setHoveredIndex(null)}
             >
-              {/* Floating Preview Card matching the screenshot */}
+              {/* Compact, sleek hover card */}
               {isHovered && (
                 <div
                   onClick={() => onScrollToMessage(turn.userMessage.id)}
-                  className="absolute right-6 top-1/2 -translate-y-1/2 z-50 w-64 rounded-xl border border-border/80 bg-[#1e1f26]/95 text-left p-3 shadow-2xl backdrop-blur-md transition-all animate-in fade-in zoom-in-95 cursor-pointer pointer-events-auto"
+                  className="absolute right-5 top-1/2 -translate-y-1/2 z-50 w-56 rounded-lg border border-border/80 bg-popover/95 p-2.5 text-left shadow-lg backdrop-blur-md transition-all animate-in fade-in zoom-in-95 cursor-pointer pointer-events-auto"
                 >
-                  <div className="font-semibold text-[13px] text-white line-clamp-2 leading-snug">
+                  <div className="font-semibold text-[11.5px] text-foreground line-clamp-2 leading-snug">
                     {userPreview}
                   </div>
                   {assistantPreview && (
-                    <div className="mt-1 text-[12px] text-neutral-400 line-clamp-3 leading-relaxed">
+                    <div className="mt-1 text-[10.5px] text-muted-foreground line-clamp-2 leading-relaxed">
                       {assistantPreview}
                     </div>
                   )}
                 </div>
               )}
 
-              {/* Horizontal Line Dash */}
+              {/* Minimal small dash indicator */}
               <button
                 type="button"
                 onClick={() => onScrollToMessage(turn.userMessage.id)}
                 className={`block rounded-full transition-all duration-150 cursor-pointer ${
                   isHovered || isCurrent
-                    ? 'h-[2px] w-6 bg-white shadow-xs'
-                    : 'h-[1.5px] w-3 bg-neutral-600 hover:w-5 hover:bg-neutral-300'
+                    ? 'h-[1.5px] w-4 bg-foreground'
+                    : 'h-[1px] w-2 bg-muted-foreground/40 hover:w-3 hover:bg-foreground/80'
                 }`}
                 title={userPreview}
               />
