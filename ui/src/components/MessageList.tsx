@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Virtuoso, type VirtuosoHandle } from 'react-virtuoso'
 import { useChatStore } from '../store/chat'
 import { MessageBubble } from './MessageBubble'
@@ -30,10 +30,12 @@ export function MessageList({ conversationId, targetMessageId }: MessageListProp
   const virtuosoRef = useRef<VirtuosoHandle>(null)
 
   const isStreamingHere = streaming?.conversationId === conversationId
+  const [activeMessageId, setActiveMessageId] = useState<number | null>(null)
 
   useEffect(() => {
     // Reset scroll position when switching conversations.
     virtuosoRef.current?.scrollToIndex({ index: messages.length - 1, align: 'end' })
+    setActiveMessageId(messages[messages.length - 1]?.id ?? null)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conversationId])
 
@@ -41,9 +43,10 @@ export function MessageList({ conversationId, targetMessageId }: MessageListProp
     if (targetMessageId !== undefined && targetMessageId !== null) {
       const targetIndex = messages.findIndex((m) => m.id === targetMessageId)
       if (targetIndex !== -1) {
+        setActiveMessageId(targetMessageId)
         virtuosoRef.current?.scrollToIndex({
           index: targetIndex,
-          align: 'center',
+          align: 'start',
           behavior: 'smooth',
         })
       }
@@ -52,10 +55,11 @@ export function MessageList({ conversationId, targetMessageId }: MessageListProp
 
   const handleScrollToMessage = (messageId: number) => {
     const targetIndex = messages.findIndex((m) => m.id === messageId)
-    if (targetIndex !== -1) {
-      virtuosoRef.current?.scrollToIndex({
+    if (targetIndex !== -1 && virtuosoRef.current) {
+      setActiveMessageId(messageId)
+      virtuosoRef.current.scrollToIndex({
         index: targetIndex,
-        align: 'center',
+        align: 'start',
         behavior: 'smooth',
       })
     }
@@ -75,6 +79,10 @@ export function MessageList({ conversationId, targetMessageId }: MessageListProp
         startReached={() => {
           if (hasMore) loadOlderMessages(conversationId)
         }}
+        rangeChanged={(range) => {
+          const firstMsg = messages[range.startIndex]
+          if (firstMsg) setActiveMessageId(firstMsg.id)
+        }}
         itemContent={(_index, message) => <MessageBubble message={message} />}
         components={{
           Footer: () => (isStreamingHere ? <StreamingBubble /> : null),
@@ -82,6 +90,7 @@ export function MessageList({ conversationId, targetMessageId }: MessageListProp
       />
       <ConversationTimeline
         messages={messages}
+        activeMessageId={activeMessageId}
         onScrollToMessage={handleScrollToMessage}
       />
     </div>

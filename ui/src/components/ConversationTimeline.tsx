@@ -36,9 +36,9 @@ export function ConversationTimeline({
   if (turns.length === 0) return null
 
   return (
-    <div className="group/timeline pointer-events-none absolute right-0 top-0 bottom-0 z-30 flex w-8 items-center justify-end pr-1 select-none">
-      {/* Small, ultra-subtle vertical dash rail */}
-      <div className="pointer-events-auto flex flex-col items-end gap-1.5 py-4 px-0.5 opacity-20 transition-opacity duration-300 group-hover/timeline:opacity-90">
+    <div className="group/timeline absolute right-0 top-0 bottom-0 z-30 flex w-10 items-center justify-end select-none pointer-events-auto">
+      {/* Small, ultra-subtle vertical dash rail with generous hover detection */}
+      <div className="flex flex-col items-end gap-1 py-4 pr-1.5 opacity-30 transition-opacity duration-200 group-hover/timeline:opacity-100">
         {turns.map((turn, index) => {
           const isHovered = hoveredIndex === index
           const isCurrent =
@@ -59,38 +59,55 @@ export function ConversationTimeline({
           return (
             <div
               key={turn.userMessage.id}
-              className="relative flex items-center justify-end py-0.5"
+              className="relative flex items-center justify-end"
               onMouseEnter={() => setHoveredIndex(index)}
               onMouseLeave={() => setHoveredIndex(null)}
             >
-              {/* Compact, sleek hover card */}
+              {/* Compact, sleek hover card with click navigation */}
               {isHovered && (
                 <div
-                  onClick={() => onScrollToMessage(turn.userMessage.id)}
-                  className="absolute right-5 top-1/2 -translate-y-1/2 z-50 w-56 rounded-lg border border-border/80 bg-popover/95 p-2.5 text-left shadow-lg backdrop-blur-md transition-all animate-in fade-in zoom-in-95 cursor-pointer pointer-events-auto"
+                  onMouseDown={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    onScrollToMessage(turn.userMessage.id)
+                  }}
+                  className="absolute right-7 top-1/2 -translate-y-1/2 z-50 w-60 rounded-xl border border-border/80 bg-popover/95 p-2.5 text-left shadow-xl backdrop-blur-md transition-all animate-in fade-in zoom-in-95 cursor-pointer"
                 >
-                  <div className="font-semibold text-[11.5px] text-foreground line-clamp-2 leading-snug">
+                  <div className="font-semibold text-[12px] text-foreground line-clamp-2 leading-snug">
                     {userPreview}
                   </div>
                   {assistantPreview && (
-                    <div className="mt-1 text-[10.5px] text-muted-foreground line-clamp-2 leading-relaxed">
+                    <div className="mt-1 text-[11px] text-muted-foreground line-clamp-2 leading-relaxed">
                       {assistantPreview}
                     </div>
                   )}
+                  <div className="mt-1.5 text-right font-mono text-[9px] text-primary/80 font-medium">
+                    Click to jump ↵
+                  </div>
                 </div>
               )}
 
-              {/* Minimal small dash indicator */}
+              {/* Generous clickable hitbox containing the minimal dash line */}
               <button
                 type="button"
-                onClick={() => onScrollToMessage(turn.userMessage.id)}
-                className={`block rounded-full transition-all duration-150 cursor-pointer ${
-                  isHovered || isCurrent
-                    ? 'h-[1.5px] w-4 bg-foreground'
-                    : 'h-[1px] w-2 bg-muted-foreground/40 hover:w-3 hover:bg-foreground/80'
-                }`}
-                title={userPreview}
-              />
+                onMouseDown={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  onScrollToMessage(turn.userMessage.id)
+                }}
+                className="flex h-5 w-8 items-center justify-end pr-0.5 cursor-pointer group/btn"
+                title={`Turn #${index + 1}: ${userPreview}`}
+              >
+                <span
+                  className={`block rounded-full transition-all duration-150 ${
+                    isHovered
+                      ? 'h-[2px] w-5 bg-foreground'
+                      : isCurrent
+                        ? 'h-[2px] w-3.5 bg-foreground/90'
+                        : 'h-[1.5px] w-2 bg-muted-foreground/40 group-hover/btn:w-4 group-hover/btn:bg-foreground'
+                  }`}
+                />
+              </button>
             </div>
           )
         })}
