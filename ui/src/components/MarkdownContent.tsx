@@ -3,6 +3,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeHighlight from 'rehype-highlight'
 import { CodeBlock } from './CodeBlock'
+import { MermaidBlock } from './MermaidBlock'
 
 interface MarkdownContentProps {
   content: string
@@ -20,6 +21,10 @@ function MarkdownContentImpl({ content }: MarkdownContentProps) {
         components={{
           code(props) {
             const { className, children, node: _node, ...rest } = props
+            const isMermaid = className?.includes('language-mermaid') || className === 'mermaid'
+            if (isMermaid) {
+              return <MermaidBlock chart={String(children)} />
+            }
             const isBlock = className?.includes('language-') || (typeof children === 'string' && children.includes('\n'))
             if (isBlock) {
               return <CodeBlock className={className}>{children}</CodeBlock>
