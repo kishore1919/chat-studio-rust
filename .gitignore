@@ -1,0 +1,12 @@
+/target
+/src-tauri/target
+/src-tauri/gen
+
+node_modules
+/ui/dist
+/ui/node_modules
+
+# local app data written at runtime, never source
+*.db
+*.db-wal
+*.db-shm

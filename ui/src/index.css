@@ -1,0 +1,75 @@
+@import 'tailwindcss';
+
+/* highlight.js theme CSS text is injected into #hljs-theme by lib/theme.ts,
+   swapped alongside data-theme rather than picked by a media query, since
+   the user can override the OS preference from Settings. */
+
+/* Design tokens. :root holds light; [data-theme="dark"] overrides.
+   Theme.ts resolves "system" to a concrete light/dark value and sets
+   data-theme itself, so this file never needs to read matchMedia. */
+:root {
+  --bg: #ffffff;
+  --bg-elevated: #f7f7f8;
+  --bg-sidebar: #fafafa;
+  --bg-hover: #f0f0f1;
+  --border: #e5e4e7;
+  --text: #16171d;
+  --text-muted: #6b6375;
+  --accent: #aa3bff;
+  --accent-bg: rgba(170, 59, 255, 0.1);
+  --bubble-user: #efe7ff;
+  --code-bg: #f4f3ec;
+  --danger: #dc2626;
+  --success: #16a34a;
+
+  --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
+  --mono: ui-monospace, Consolas, 'SFMono-Regular', monospace;
+
+  color-scheme: light;
+}
+
+:root[data-theme='dark'] {
+  --bg: #16171d;
+  --bg-elevated: #1c1d24;
+  --bg-sidebar: #1a1b21;
+  --bg-hover: #24252d;
+  --border: #2e303a;
+  --text: #f3f4f6;
+  --text-muted: #9ca3af;
+  --accent: #c084fc;
+  --accent-bg: rgba(192, 132, 252, 0.15);
+  --bubble-user: #362a4a;
+  --code-bg: #1f2028;
+  --danger: #f87171;
+  --success: #4ade80;
+
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font: 14px/1.5 var(--sans);
+  color: var(--text);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+code,
+pre {
+  font-family: var(--mono);
+}
+
+::selection {
+  background: var(--accent-bg);
+}
+
+/* dark highlight.js theme, active only when data-theme=dark */
+:root[data-theme='dark'] .hljs {
+  background: var(--code-bg) !important;
+}
