@@ -71,6 +71,8 @@ export const ipc = {
   callMcpTool: (serverId: string, toolName: string, args: Record<string, unknown>) =>
     invoke<string>('call_mcp_tool', { serverId, toolName, arguments: args }),
 
+  listGlobalSkills: () => invoke<import('./types').Skill[]>('list_global_skills'),
+
   openConfigDir: () => invoke<void>('open_config_dir'),
 }
 

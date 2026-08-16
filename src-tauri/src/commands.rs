@@ -507,3 +507,9 @@ pub async fn call_mcp_tool(
     let server = server.ok_or_else(|| format!("MCP Server '{}' not found", server_id))?;
     crate::mcp::execute_tool(&server.command, &server.args, &server.env, &tool_name, &arguments).await
 }
+
+#[tauri::command]
+pub async fn list_global_skills() -> Result<Vec<crate::config::Skill>, String> {
+    Ok(crate::skills::discover_global_skills())
+}
+

@@ -6,6 +6,7 @@ mod config;
 mod db;
 mod mcp;
 mod providers;
+mod skills;
 mod state;
 
 use state::AppState;
@@ -52,6 +53,7 @@ fn main() {
             commands::test_mcp_server,
             commands::list_mcp_tools,
             commands::call_mcp_tool,
+            commands::list_global_skills,
             commands::open_config_dir,
         ])
         .run(tauri::generate_context!())

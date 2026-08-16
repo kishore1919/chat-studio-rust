@@ -1,4 +1,4 @@
-// Mirrors the Rust types in src-tauri/src/{config,db,providers/mod,mcp}.rs.
+// Mirrors the Rust types in src-tauri/src/{config,db,providers/mod,mcp,skills}.rs.
 // Keep field names/casing in sync - commands.rs serializes with serde's
 // default camelCase-free (snake_case) representation, matched here verbatim.
 
@@ -40,6 +40,21 @@ export interface Skill {
   slash_command: string
   icon: string
   enabled: boolean
+  source?: 'builtin' | 'custom' | 'global' | string
+  path?: string | null
+}
+
+export interface AgentConfig {
+  id: string
+  name: string
+  description: string
+  role: string
+  system_prompt: string
+  provider: string | null
+  model: string | null
+  skills: string[]
+  icon: string
+  enabled: boolean
 }
 
 export type ThemePreference = 'light' | 'dark' | 'system'
@@ -53,6 +68,7 @@ export interface Settings {
   system_prompt: string | null
   mcp_servers: McpServerConfig[]
   skills: Skill[]
+  agents: AgentConfig[]
 }
 
 export interface Conversation {

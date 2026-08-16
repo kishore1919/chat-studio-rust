@@ -61,6 +61,14 @@ pub struct Skill {
     pub icon: String,
     #[serde(default = "default_true")]
     pub enabled: bool,
+    #[serde(default = "default_source")]
+    pub source: String,
+    #[serde(default)]
+    pub path: Option<String>,
+}
+
+fn default_source() -> String {
+    "builtin".into()
 }
 
 fn default_skills() -> Vec<Skill> {
@@ -73,6 +81,8 @@ fn default_skills() -> Vec<Skill> {
             slash_command: "review".into(),
             icon: "code".into(),
             enabled: true,
+            source: "builtin".into(),
+            path: None,
         },
         Skill {
             id: "summarize".into(),
@@ -82,6 +92,8 @@ fn default_skills() -> Vec<Skill> {
             slash_command: "summarize".into(),
             icon: "file-text".into(),
             enabled: true,
+            source: "builtin".into(),
+            path: None,
         },
         Skill {
             id: "problem-solver".into(),
@@ -91,6 +103,8 @@ fn default_skills() -> Vec<Skill> {
             slash_command: "solve".into(),
             icon: "brain".into(),
             enabled: true,
+            source: "builtin".into(),
+            path: None,
         },
         Skill {
             id: "translator".into(),
@@ -99,6 +113,68 @@ fn default_skills() -> Vec<Skill> {
             system_prompt: "You are a professional multilingual translator. Translate the text accurately while preserving nuance, cultural context, and markdown formatting.".into(),
             slash_command: "translate".into(),
             icon: "languages".into(),
+            enabled: true,
+            source: "builtin".into(),
+            path: None,
+        },
+    ]
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AgentConfig {
+    pub id: String,
+    pub name: String,
+    pub description: String,
+    pub role: String,
+    pub system_prompt: String,
+    #[serde(default)]
+    pub provider: Option<String>,
+    #[serde(default)]
+    pub model: Option<String>,
+    #[serde(default)]
+    pub skills: Vec<String>,
+    #[serde(default)]
+    pub icon: String,
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+}
+
+fn default_agents() -> Vec<AgentConfig> {
+    vec![
+        AgentConfig {
+            id: "general-assistant".into(),
+            name: "General Assistant".into(),
+            description: "Friendly and intelligent AI assistant for every task.".into(),
+            role: "Helpful Assistant".into(),
+            system_prompt: "You are a thoughtful, helpful, and highly capable AI assistant.".into(),
+            provider: None,
+            model: None,
+            skills: vec![],
+            icon: "bot".into(),
+            enabled: true,
+        },
+        AgentConfig {
+            id: "code-architect".into(),
+            name: "Code Architect".into(),
+            description: "Senior systems and software design engineer.".into(),
+            role: "Software Architect".into(),
+            system_prompt: "You are an elite software architect and senior developer. When discussing code, give clean, idiomatic, robust, and well-structured solutions with full attention to edge cases, performance, and best practices.".into(),
+            provider: None,
+            model: None,
+            skills: vec!["code-review".into(), "problem-solver".into()],
+            icon: "code".into(),
+            enabled: true,
+        },
+        AgentConfig {
+            id: "research-analyst".into(),
+            name: "Research Analyst".into(),
+            description: "Deep dive research, fact-checking, and structured reports.".into(),
+            role: "Research Specialist".into(),
+            system_prompt: "You are a meticulous research analyst. Provide deep, balanced, well-referenced, and synthesized insights on any topic.".into(),
+            provider: None,
+            model: None,
+            skills: vec!["summarize".into()],
+            icon: "search".into(),
             enabled: true,
         },
     ]
@@ -122,6 +198,8 @@ pub struct Settings {
     pub mcp_servers: Vec<McpServerConfig>,
     #[serde(default = "default_skills")]
     pub skills: Vec<Skill>,
+    #[serde(default = "default_agents")]
+    pub agents: Vec<AgentConfig>,
 }
 
 fn default_theme() -> ThemePreference {
@@ -174,6 +252,7 @@ impl Default for Settings {
             system_prompt: None,
             mcp_servers: Vec::new(),
             skills: default_skills(),
+            agents: default_agents(),
         }
     }
 }

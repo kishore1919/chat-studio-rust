@@ -28,12 +28,13 @@ import { cn } from '@/lib/utils'
 
 import { McpPane } from '../components/McpPane'
 import { SkillsPane } from '../components/SkillsPane'
+import { AgentsPane } from '../components/AgentsPane'
 
 interface SettingsProps {
   onBack: () => void
 }
 
-type NavSection = 'model-provider' | 'default-model' | 'mcp' | 'skills' | 'appearance' | 'data'
+type NavSection = 'model-provider' | 'default-model' | 'agents' | 'skills' | 'mcp' | 'appearance' | 'data'
 
 const NAV_GROUPS: { label: string; items: { id: NavSection; label: string }[] }[] = [
   {
@@ -44,10 +45,11 @@ const NAV_GROUPS: { label: string; items: { id: NavSection; label: string }[] }[
     ],
   },
   {
-    label: 'Tools & Skills',
+    label: 'Agents & Skills',
     items: [
-      { id: 'mcp', label: 'MCP Servers' },
+      { id: 'agents', label: 'Agents & Assistants' },
       { id: 'skills', label: 'Skills & Prompts' },
+      { id: 'mcp', label: 'MCP Servers' },
     ],
   },
   {
@@ -101,8 +103,9 @@ export function Settings({ onBack }: SettingsProps) {
         <div className="min-w-0 flex-1 overflow-y-auto p-4">
           {section === 'model-provider' && <ModelProviderPane />}
           {section === 'default-model' && <DefaultModelPane />}
-          {section === 'mcp' && <McpPane />}
+          {section === 'agents' && <AgentsPane />}
           {section === 'skills' && <SkillsPane />}
+          {section === 'mcp' && <McpPane />}
           {section === 'appearance' && <AppearancePane />}
           {section === 'data' && <DataPane />}
         </div>

@@ -1,15 +1,19 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   BrainIcon,
   CodeIcon,
   FileTextIcon,
+  FolderSyncIcon,
+  GlobeIcon,
   LanguagesIcon,
+  Loader2Icon,
   PencilIcon,
   PlusIcon,
   SparklesIcon,
   Trash2Icon,
 } from 'lucide-react'
 import { useSettingsStore } from '../store/settings'
+import { ipc } from '../lib/ipc'
 import type { Skill } from '../lib/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -34,17 +38,23 @@ function getSkillIcon(icon: string) {
       return <BrainIcon className="size-4 text-primary" />
     case 'languages':
       return <LanguagesIcon className="size-4 text-primary" />
+    case 'globe':
+      return <GlobeIcon className="size-4 text-primary" />
     default:
       return <SparklesIcon className="size-4 text-primary" />
   }
 }
 
+type FilterTab = 'all' | 'builtin' | 'global' | 'custom'
+
 export function SkillsPane() {
   const settings = useSettingsStore((s) => s.settings)
   const save = useSettingsStore((s) => s.save)
 
+  const [activeTab, setActiveTab] = useState<FilterTab>('all')
   const [modalOpen, setModalOpen] = useState(false)
   const [editingSkill, setEditingSkill] = useState<Skill | null>(null)
+  const [scanning, setScanning] = useState(false)
 
   const [name, setName] = useState('')
   const [slashCommand, setSlashCommand] = useState('')
@@ -52,6 +62,32 @@ export function SkillsPane() {
   const [systemPrompt, setSystemPrompt] = useState('')
 
   const skills = settings?.skills ?? []
+
+  // Auto scan global skills on initial open if not scanned
+  const handleScanGlobal = async () => {
+    if (!settings) return
+    setScanning(true)
+    try {
+      const globalSkills = await ipc.listGlobalSkills()
+      if (globalSkills.length > 0) {
+        // Merge without duplicate IDs
+        const existingIds = new Set(skills.map((s) => s.id))
+        const newToAdd = globalSkills.filter((gs) => !existingIds.has(gs.id))
+        if (newToAdd.length > 0) {
+          save({ ...settings, skills: [...skills, ...newToAdd] })
+        }
+      }
+    } catch (err) {
+      console.error('Failed to scan global skills:', err)
+    } finally {
+      setScanning(false)
+    }
+  }
+
+  useEffect(() => {
+    // Scan global skills once on mount
+    handleScanGlobal()
+  }, [])
 
   const handleToggle = (id: string, enabled: boolean) => {
     if (!settings) return
@@ -116,6 +152,8 @@ export function SkillsPane() {
         system_prompt: systemPrompt.trim(),
         icon: 'sparkles',
         enabled: true,
+        source: 'custom',
+        path: null,
       }
       save({ ...settings, skills: [...skills, newSkill] })
     }
@@ -123,78 +161,148 @@ export function SkillsPane() {
     setModalOpen(false)
   }
 
+  const filteredSkills = skills.filter((s) => {
+    if (activeTab === 'all') return true
+    if (activeTab === 'builtin') return s.source === 'builtin' || !s.source
+    if (activeTab === 'global') return s.source === 'global'
+    if (activeTab === 'custom') return s.source === 'custom'
+    return true
+  })
+
   return (
     <div className="max-w-3xl space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-base font-semibold text-foreground">Skills & Persona Prompts</h2>
           <p className="text-xs text-muted-foreground">
-            Custom modular abilities, review workflows, and specialized system prompts callable with /slash commands.
+            Modular abilities and prompts from built-ins, global directories (~/.agents, ~/.claude, ~/.gemini), and custom skills.
           </p>
         </div>
-        <Button size="sm" onClick={openAdd} className="gap-1.5 text-xs">
-          <PlusIcon className="size-3.5" /> Add Skill
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={scanning}
+            onClick={handleScanGlobal}
+            className="gap-1.5 text-xs"
+          >
+            {scanning ? <Loader2Icon className="size-3.5 animate-spin" /> : <FolderSyncIcon className="size-3.5" />}
+            Scan Global Skills
+          </Button>
+          <Button size="sm" onClick={openAdd} className="gap-1.5 text-xs">
+            <PlusIcon className="size-3.5" /> Add Skill
+          </Button>
+        </div>
+      </div>
+
+      {/* Filter Tabs */}
+      <div className="flex items-center gap-1.5 border-b border-border pb-2">
+        <button
+          onClick={() => setActiveTab('all')}
+          className={`rounded-md px-2.5 py-1 text-xs transition-colors cursor-pointer ${
+            activeTab === 'all' ? 'bg-primary text-primary-foreground font-medium' : 'text-muted-foreground hover:bg-accent'
+          }`}
+        >
+          All ({skills.length})
+        </button>
+        <button
+          onClick={() => setActiveTab('builtin')}
+          className={`rounded-md px-2.5 py-1 text-xs transition-colors cursor-pointer ${
+            activeTab === 'builtin' ? 'bg-primary text-primary-foreground font-medium' : 'text-muted-foreground hover:bg-accent'
+          }`}
+        >
+          Built-in ({skills.filter((s) => s.source === 'builtin' || !s.source).length})
+        </button>
+        <button
+          onClick={() => setActiveTab('global')}
+          className={`rounded-md px-2.5 py-1 text-xs transition-colors cursor-pointer ${
+            activeTab === 'global' ? 'bg-primary text-primary-foreground font-medium' : 'text-muted-foreground hover:bg-accent'
+          }`}
+        >
+          Global & System ({skills.filter((s) => s.source === 'global').length})
+        </button>
+        <button
+          onClick={() => setActiveTab('custom')}
+          className={`rounded-md px-2.5 py-1 text-xs transition-colors cursor-pointer ${
+            activeTab === 'custom' ? 'bg-primary text-primary-foreground font-medium' : 'text-muted-foreground hover:bg-accent'
+          }`}
+        >
+          Custom ({skills.filter((s) => s.source === 'custom').length})
+        </button>
       </div>
 
       <div className="grid grid-cols-1 gap-3">
-        {skills.map((skill) => (
-          <div
-            key={skill.id}
-            className="flex flex-col gap-2 rounded-xl border border-border bg-card p-4 text-xs transition-colors"
-          >
-            <div className="flex items-start justify-between">
-              <div className="flex items-start gap-2.5">
-                <div className="flex size-7 items-center justify-center rounded-lg bg-primary/10">
-                  {getSkillIcon(skill.icon)}
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-semibold text-foreground">{skill.name}</span>
-                    {skill.slash_command && (
-                      <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-primary">
-                        /{skill.slash_command}
+        {filteredSkills.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-border p-8 text-center text-xs text-muted-foreground">
+            No skills found in this category.
+          </div>
+        ) : (
+          filteredSkills.map((skill) => (
+            <div
+              key={skill.id}
+              className="flex flex-col gap-2 rounded-xl border border-border bg-card p-4 text-xs transition-colors"
+            >
+              <div className="flex items-start justify-between">
+                <div className="flex items-start gap-2.5">
+                  <div className="flex size-7 items-center justify-center rounded-lg bg-primary/10">
+                    {getSkillIcon(skill.icon)}
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-semibold text-foreground">{skill.name}</span>
+                      {skill.slash_command && (
+                        <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-primary">
+                          /{skill.slash_command}
+                        </span>
+                      )}
+                      <span className="rounded border border-border/60 bg-muted/30 px-1.5 py-0.2 text-[9px] uppercase tracking-wider text-muted-foreground font-medium">
+                        {skill.source ?? 'builtin'}
                       </span>
+                    </div>
+                    <div className="text-muted-foreground text-[11px] mt-0.5">
+                      {skill.description}
+                    </div>
+                    {skill.path && (
+                      <div className="font-mono text-[10px] text-muted-foreground/70 truncate max-w-md mt-0.5" title={skill.path}>
+                        {skill.path}
+                      </div>
                     )}
                   </div>
-                  <div className="text-muted-foreground text-[11px] mt-0.5">
-                    {skill.description}
-                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <Switch
+                    checked={skill.enabled}
+                    onCheckedChange={(checked) => handleToggle(skill.id, checked)}
+                  />
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    onClick={() => openEdit(skill)}
+                    className="size-7 text-muted-foreground hover:text-foreground"
+                    title="Edit skill"
+                  >
+                    <PencilIcon className="size-3.5" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    onClick={() => handleDelete(skill.id)}
+                    className="size-7 text-muted-foreground hover:text-destructive"
+                    title="Delete skill"
+                  >
+                    <Trash2Icon className="size-3.5" />
+                  </Button>
                 </div>
               </div>
 
-              <div className="flex items-center gap-2">
-                <Switch
-                  checked={skill.enabled}
-                  onCheckedChange={(checked) => handleToggle(skill.id, checked)}
-                />
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  onClick={() => openEdit(skill)}
-                  className="size-7 text-muted-foreground hover:text-foreground"
-                  title="Edit skill"
-                >
-                  <PencilIcon className="size-3.5" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  onClick={() => handleDelete(skill.id)}
-                  className="size-7 text-muted-foreground hover:text-destructive"
-                  title="Delete skill"
-                >
-                  <Trash2Icon className="size-3.5" />
-                </Button>
+              {/* Prompt preview */}
+              <div className="rounded-lg bg-muted/40 p-2 text-[11px] font-mono text-muted-foreground line-clamp-2">
+                {skill.system_prompt}
               </div>
             </div>
-
-            {/* Prompt preview */}
-            <div className="rounded-lg bg-muted/40 p-2 text-[11px] font-mono text-muted-foreground line-clamp-2">
-              {skill.system_prompt}
-            </div>
-          </div>
-        ))}
+          ))
+        )}
       </div>
 
       {/* Add / Edit Skill Dialog */}
