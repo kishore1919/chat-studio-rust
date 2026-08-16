@@ -211,3 +211,14 @@ pre {
   margin: 1rem 0;
 }
 
+.hljs {
+  background: transparent !important;
+  color: inherit;
+  padding: 0 !important;
+}
+
+pre code.hljs {
+  padding: 0 !important;
+}
+
+
