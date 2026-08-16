@@ -1,7 +1,20 @@
-import { memo, useState } from 'react'
+import { memo, useMemo, useState } from 'react'
+import {
+  CheckIcon,
+  ChevronDownIcon,
+  ChevronRightIcon,
+  CopyIcon,
+  PencilIcon,
+  RotateCcwIcon,
+  Trash2Icon,
+} from 'lucide-react'
 import type { Message } from '../lib/types'
 import { MarkdownContent } from './MarkdownContent'
+import { ToolCallCard, extractToolCalls } from './ToolCallCard'
+import { ThinkingBar, extractThinking } from './ThinkingBar'
 import { useChatStore } from '../store/chat'
+import { Button } from '@/components/ui/button'
+import { Textarea } from '@/components/ui/textarea'
 
 interface MessageBubbleProps {
   message: Message
@@ -13,15 +26,47 @@ function formatDuration(ms: number | null) {
   return `${(ms / 1000).toFixed(1)}s`
 }
 
-/** Wrapped in React.memo so it never re-renders while a sibling message is
- * streaming - the streaming bubble lives in a separate zustand slice and
- * this component only reads its own `message` prop. */
+function formatTokensPerSecond(tokensOut: number | null, durationMs: number | null) {
+  if (!tokensOut || !durationMs) return null
+  const seconds = durationMs / 1000
+  if (seconds <= 0) return null
+  return (tokensOut / seconds).toFixed(1)
+}
+
 function MessageBubbleImpl({ message }: MessageBubbleProps) {
   const [expanded, setExpanded] = useState(false)
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(message.content)
+  const [copied, setCopied] = useState(false)
+
   const editMessage = useChatStore((s) => s.editMessage)
   const deleteMessage = useChatStore((s) => s.deleteMessage)
+  const retryMessage = useChatStore((s) => s.retryMessage)
+  const isStreaming = useChatStore((s) => s.streaming !== null)
+
+  const { reasoning, cleanedAfterThinking } = useMemo(() => {
+    if (message.role !== 'assistant') {
+      return { reasoning: null, cleanedAfterThinking: message.content }
+    }
+    if (message.reasoning) {
+      return { reasoning: message.reasoning, cleanedAfterThinking: message.content }
+    }
+    const extracted = extractThinking(message.content)
+    return { reasoning: extracted.reasoning, cleanedAfterThinking: extracted.cleanedContent }
+  }, [message.content, message.reasoning, message.role])
+
+  const { toolCalls, cleanedText } = useMemo(() => {
+    if (message.role === 'assistant') {
+      return extractToolCalls(cleanedAfterThinking)
+    }
+    return { toolCalls: [], cleanedText: message.content }
+  }, [cleanedAfterThinking, message.content, message.role])
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(message.content)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
 
   const startEdit = () => {
     setDraft(message.content)
@@ -36,50 +81,65 @@ function MessageBubbleImpl({ message }: MessageBubbleProps) {
   }
 
   const actions = (
-    <div className="mt-1 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-      <button
-        onClick={() => navigator.clipboard.writeText(message.content)}
-        className="rounded px-1.5 py-0.5 text-xs text-[var(--text-muted)] hover:bg-[var(--bg-hover)]"
+    <div className="mt-1 flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        className="size-6 text-muted-foreground hover:text-foreground"
+        title="Copy"
+        onClick={handleCopy}
       >
-        Copy
-      </button>
-      <button
+        {copied ? <CheckIcon className="size-3 text-success" /> : <CopyIcon className="size-3" />}
+      </Button>
+      {message.role === 'user' && (
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          className="size-6 text-muted-foreground hover:text-foreground"
+          title="Retry / Regenerate"
+          disabled={isStreaming}
+          onClick={() => retryMessage(message)}
+        >
+          <RotateCcwIcon className="size-3" />
+        </Button>
+      )}
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        className="size-6 text-muted-foreground hover:text-foreground"
+        title="Edit"
         onClick={startEdit}
-        className="rounded px-1.5 py-0.5 text-xs text-[var(--text-muted)] hover:bg-[var(--bg-hover)]"
       >
-        Edit
-      </button>
-      <button
+        <PencilIcon className="size-3" />
+      </Button>
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        className="size-6 text-muted-foreground hover:text-destructive"
+        title="Delete"
         onClick={() => deleteMessage(message)}
-        className="rounded px-1.5 py-0.5 text-xs text-[var(--danger)] hover:bg-[var(--bg-hover)]"
       >
-        Delete
-      </button>
+        <Trash2Icon className="size-3" />
+      </Button>
     </div>
   )
 
   const editBox = editing && (
-    <div className="mt-1 flex flex-col gap-1.5">
-      <textarea
+    <div className="mt-1.5 flex flex-col gap-1.5 rounded-lg border border-border bg-card p-2.5">
+      <Textarea
         autoFocus
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
         rows={Math.min(8, Math.max(2, draft.split('\n').length))}
-        className="w-full resize-y rounded-lg border border-[var(--accent)] bg-[var(--bg-elevated)] px-2 py-1.5 text-[13px] outline-none"
+        className="w-full resize-y border-0 bg-transparent p-0 text-[13px] shadow-none focus-visible:ring-0"
       />
-      <div className="flex justify-end gap-2">
-        <button
-          onClick={() => setEditing(false)}
-          className="rounded px-2 py-1 text-xs text-[var(--text-muted)] hover:bg-[var(--bg-hover)]"
-        >
+      <div className="flex justify-end gap-2 border-t border-border/40 pt-1.5">
+        <Button variant="ghost" size="sm" onClick={() => setEditing(false)}>
           Cancel
-        </button>
-        <button
-          onClick={commitEdit}
-          className="rounded bg-[var(--accent)] px-2 py-1 text-xs text-white"
-        >
+        </Button>
+        <Button size="sm" onClick={commitEdit}>
           Save
-        </button>
+        </Button>
       </div>
     </div>
   )
@@ -87,11 +147,11 @@ function MessageBubbleImpl({ message }: MessageBubbleProps) {
   if (message.role === 'user') {
     return (
       <div className="group flex justify-end px-4 py-2">
-        <div className="max-w-[75%]">
+        <div className="max-w-[75%] min-w-0">
           {editing ? (
             editBox
           ) : (
-            <div className="rounded-2xl bg-[var(--bubble-user)] px-4 py-2 text-[14px] whitespace-pre-wrap break-words">
+            <div className="rounded-2xl rounded-tr-xs bg-[var(--bubble-user)] px-4 py-2.5 text-[14px] leading-relaxed whitespace-pre-wrap break-words">
               {message.content}
             </div>
           )}
@@ -102,27 +162,59 @@ function MessageBubbleImpl({ message }: MessageBubbleProps) {
   }
 
   const duration = formatDuration(message.duration_ms)
+  const tokensPerSecond = formatTokensPerSecond(message.tokens_out, message.duration_ms)
+
+  const renderAssistantContent = () => {
+    if (toolCalls.length === 0) {
+      return <MarkdownContent content={cleanedText} />
+    }
+
+    const parts = cleanedText.split(/%%TOOL_CALL_(\d+)%%/g)
+    return (
+      <div className="space-y-2">
+        {parts.map((part, index) => {
+          if (index % 2 === 1) {
+            const toolIndex = parseInt(part, 10)
+            const tool = toolCalls[toolIndex]
+            return tool ? <ToolCallCard key={`tool-${tool.id}`} toolCall={tool} /> : null
+          }
+          if (!part.trim()) return null
+          return <MarkdownContent key={`text-${index}`} content={part} />
+        })}
+      </div>
+    )
+  }
 
   return (
-    <div className="group px-4 py-2">
-      <div className="mb-1 flex items-center gap-2 text-[13px]">
-        <span className="font-semibold">Assistant</span>
-        {message.model && <span className="text-[var(--text-muted)]">{message.model}</span>}
+    <div className="group px-4 py-2.5 hover:bg-accent/15 transition-colors">
+      <div className="mb-1 flex flex-wrap items-center gap-2 text-[13px]">
+        <span className="font-semibold text-foreground">Assistant</span>
+        {message.model && (
+          <span className="text-muted-foreground text-xs">{message.model}</span>
+        )}
         {duration && (
           <button
             onClick={() => setExpanded((v) => !v)}
-            className="text-[var(--text-muted)] hover:text-[var(--text)]"
+            className="flex items-center gap-0.5 text-xs text-muted-foreground hover:text-foreground"
           >
-            Processed · {duration} {expanded ? '▾' : '›'}
+            Processed · {duration}
+            {expanded ? <ChevronDownIcon className="size-3" /> : <ChevronRightIcon className="size-3" />}
           </button>
         )}
       </div>
+
       {expanded && (
-        <div className="mb-2 rounded-md bg-[var(--bg-elevated)] px-3 py-2 text-[12px] text-[var(--text-muted)]">
+        <div className="mb-2 rounded-md bg-muted px-3 py-1.5 text-[12px] text-muted-foreground">
           {message.tokens_in ?? '?'} in · {message.tokens_out ?? '?'} out · {duration}
+          {tokensPerSecond && ` · ${tokensPerSecond} tok/s`}
         </div>
       )}
-      {editing ? editBox : <MarkdownContent content={message.content} />}
+
+      {reasoning && (
+        <ThinkingBar reasoning={reasoning} durationMs={message.duration_ms} />
+      )}
+
+      {editing ? editBox : renderAssistantContent()}
       {!editing && actions}
     </div>
   )

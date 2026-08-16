@@ -11,12 +11,15 @@ use tokio_util::sync::CancellationToken;
 pub struct ChatMessage {
     pub role: String,
     pub content: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reasoning: Option<String>,
 }
 
 #[derive(Debug, Clone)]
 pub struct ChatRequest {
     pub model: String,
     pub messages: Vec<ChatMessage>,
+    pub reasoning_effort: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

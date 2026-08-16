@@ -12,6 +12,7 @@ interface SettingsState {
   addProvider: (provider: ProviderConfig) => Promise<void>
   removeProvider: (providerId: string) => Promise<void>
   refreshModels: (providerId: string, force?: boolean) => Promise<void>
+  prefetchEnabledProviderModels: () => void
 }
 
 export const useSettingsStore = create<SettingsState>((set, get) => ({
@@ -46,5 +47,23 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   refreshModels: async (providerId, force = false) => {
     const models = await ipc.listModels(providerId, force)
     set((s) => ({ modelsByProvider: { ...s.modelsByProvider, [providerId]: models } }))
+  },
+
+  // Deliberately fire-and-forget (not awaited by callers) so the unified
+  // model picker in the header has something to show without making
+  // startup wait on a network round trip per provider. The backend already
+  // caches each provider's list for 5 minutes, so this is cheap on repeat
+  // launches and any provider that fails (bad key, unreachable) just stays
+  // empty in the picker rather than blocking the rest of the app.
+  prefetchEnabledProviderModels: () => {
+    const settings = get().settings
+    if (!settings) return
+    for (const provider of settings.providers) {
+      if (!provider.enabled) continue
+      if (get().modelsByProvider[provider.id]) continue
+      get()
+        .refreshModels(provider.id, false)
+        .catch(() => {})
+    }
   },
 }))

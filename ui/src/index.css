@@ -1,4 +1,5 @@
 @import 'tailwindcss';
+@import 'tw-animate-css';
 
 /* highlight.js theme CSS text is injected into #hljs-theme by lib/theme.ts,
    swapped alongside data-theme rather than picked by a media query, since
@@ -6,7 +7,17 @@
 
 /* Design tokens. :root holds light; [data-theme="dark"] overrides.
    Theme.ts resolves "system" to a concrete light/dark value and sets
-   data-theme itself, so this file never needs to read matchMedia. */
+   data-theme itself, so this file never needs to read matchMedia.
+
+   Two layers here:
+   - the app's own tokens (--bg, --text, --accent, ...) carried over from
+     before shadcn/ui, still used directly by a few components
+   - shadcn/ui's semantic tokens (--background, --primary, --accent, ...)
+     aliased onto the same values, so every shadcn primitive picks up this
+     palette instead of its zinc/slate defaults. Note shadcn's `--accent` is
+     a subtle hover/highlight *surface*, not the brand color - it maps to
+     --accent-bg (the tinted purple), while --primary (buttons, CTAs) maps
+     to the solid --accent purple. */
 :root {
   --bg: #ffffff;
   --bg-elevated: #f7f7f8;
@@ -26,6 +37,26 @@
   --mono: ui-monospace, Consolas, 'SFMono-Regular', monospace;
 
   color-scheme: light;
+
+  --background: var(--bg);
+  --foreground: var(--text);
+  --card: var(--bg-elevated);
+  --card-foreground: var(--text);
+  --popover: var(--bg-elevated);
+  --popover-foreground: var(--text);
+  --primary: var(--accent);
+  --primary-foreground: #ffffff;
+  --secondary: var(--bg-hover);
+  --secondary-foreground: var(--text);
+  --muted: var(--bg-elevated);
+  --muted-foreground: var(--text-muted);
+  --accent-surface: var(--accent-bg);
+  --accent-surface-foreground: var(--text);
+  --destructive: var(--danger);
+  --destructive-foreground: #ffffff;
+  --input: var(--border);
+  --ring: var(--accent);
+  --radius: 0.625rem;
 }
 
 :root[data-theme='dark'] {
@@ -44,6 +75,39 @@
   --success: #4ade80;
 
   color-scheme: dark;
+
+  --primary-foreground: #16171d;
+  --destructive-foreground: #16171d;
+}
+
+/* Tailwind v4: expose the CSS custom properties above as theme colors, so
+   utilities like bg-background, text-foreground, border-border exist. */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent-surface);
+  --color-accent-foreground: var(--accent-surface-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-sidebar: var(--bg-sidebar);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
 }
 
 html,
@@ -73,3 +137,75 @@ pre {
 :root[data-theme='dark'] .hljs {
   background: var(--code-bg) !important;
 }
+
+/* Markdown typography & structure */
+.prose-chat {
+  color: var(--text);
+  line-height: 1.65;
+}
+
+.prose-chat p {
+  margin-bottom: 0.65rem;
+}
+
+.prose-chat p:last-child {
+  margin-bottom: 0;
+}
+
+.prose-chat h1,
+.prose-chat h2,
+.prose-chat h3,
+.prose-chat h4 {
+  color: var(--text);
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.prose-chat ul {
+  list-style-type: disc;
+  padding-left: 1.35rem;
+  margin: 0.5rem 0;
+}
+
+.prose-chat ol {
+  list-style-type: decimal;
+  padding-left: 1.35rem;
+  margin: 0.5rem 0;
+}
+
+.prose-chat li {
+  margin-bottom: 0.25rem;
+  line-height: 1.6;
+}
+
+.prose-chat table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.75rem 0;
+}
+
+.prose-chat th,
+.prose-chat td {
+  padding: 0.45rem 0.75rem;
+  border: 1px solid var(--border);
+}
+
+.prose-chat th {
+  background: var(--bg-hover);
+  font-weight: 600;
+}
+
+.prose-chat blockquote {
+  border-left: 3px solid var(--accent);
+  background: var(--accent-bg);
+  padding: 0.5rem 0.85rem;
+  border-radius: 0 0.375rem 0.375rem 0;
+  margin: 0.65rem 0;
+}
+
+.prose-chat hr {
+  border: 0;
+  border-top: 1px solid var(--border);
+  margin: 1rem 0;
+}
+

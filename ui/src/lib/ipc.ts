@@ -28,11 +28,20 @@ export const ipc = {
   deleteConversation: (conversationId: number) =>
     invoke<void>('delete_conversation', { conversationId }),
 
+  pinConversation: (conversationId: number, pinned: boolean) =>
+    invoke<void>('pin_conversation', { conversationId, pinned }),
+
+  clearConversation: (conversationId: number) =>
+    invoke<void>('clear_conversation', { conversationId }),
+
   setConversationModel: (conversationId: number, provider: string, model: string) =>
     invoke<void>('set_conversation_model', { conversationId, provider, model }),
 
-  sendMessage: (conversationId: number, text: string) =>
-    invoke<string>('send_message', { conversationId, text }),
+  sendMessage: (conversationId: number, text: string, reasoningEffort?: string | null) =>
+    invoke<string>('send_message', { conversationId, text, reasoningEffort: reasoningEffort ?? null }),
+
+  retryMessage: (conversationId: number, messageId: number, reasoningEffort?: string | null) =>
+    invoke<string>('retry_message', { conversationId, messageId, reasoningEffort: reasoningEffort ?? null }),
 
   cancelStream: (streamId: string) => invoke<void>('cancel_stream', { streamId }),
 

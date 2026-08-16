@@ -28,6 +28,8 @@ pub struct ProviderConfig {
     pub enabled: bool,
     #[serde(default)]
     pub extra_headers: std::collections::BTreeMap<String, String>,
+    #[serde(default)]
+    pub models: Vec<String>,
 }
 
 fn default_true() -> bool {
@@ -70,6 +72,7 @@ impl Default for Settings {
                     api_key: String::new(),
                     enabled: true,
                     extra_headers: Default::default(),
+                    models: Vec::new(),
                 },
                 ProviderConfig {
                     id: "nvidia-nim".into(),
@@ -79,6 +82,7 @@ impl Default for Settings {
                     api_key: String::new(),
                     enabled: true,
                     extra_headers: Default::default(),
+                    models: Vec::new(),
                 },
                 ProviderConfig {
                     id: "ollama-cloud".into(),
@@ -88,6 +92,7 @@ impl Default for Settings {
                     api_key: String::new(),
                     enabled: true,
                     extra_headers: Default::default(),
+                    models: Vec::new(),
                 },
             ],
             default_provider: None,

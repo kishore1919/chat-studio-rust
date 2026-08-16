@@ -58,6 +58,22 @@ pub fn delete_conversation(state: State<AppState>, conversation_id: i64) -> Resu
 }
 
 #[tauri::command]
+pub fn pin_conversation(
+    state: State<AppState>,
+    conversation_id: i64,
+    pinned: bool,
+) -> Result<(), String> {
+    let conn = state.db.lock().unwrap();
+    db::set_conversation_pinned(&conn, conversation_id, pinned).map_err(db_err)
+}
+
+#[tauri::command]
+pub fn clear_conversation(state: State<AppState>, conversation_id: i64) -> Result<(), String> {
+    let conn = state.db.lock().unwrap();
+    db::clear_messages(&conn, conversation_id).map_err(db_err)
+}
+
+#[tauri::command]
 pub fn set_conversation_model(
     state: State<AppState>,
     conversation_id: i64,
@@ -78,6 +94,21 @@ pub fn edit_message(state: State<AppState>, message_id: i64, content: String) ->
 pub fn delete_message(state: State<AppState>, message_id: i64) -> Result<(), String> {
     let conn = state.db.lock().unwrap();
     db::delete_message(&conn, message_id).map_err(db_err)
+}
+
+#[tauri::command]
+pub async fn retry_message(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    conversation_id: i64,
+    message_id: i64,
+    reasoning_effort: Option<String>,
+) -> Result<String, String> {
+    {
+        let conn = state.db.lock().unwrap();
+        db::delete_message_and_after(&conn, conversation_id, message_id).map_err(db_err)?;
+    }
+    start_stream(app, &state, conversation_id, reasoning_effort).await
 }
 
 #[tauri::command]
@@ -209,6 +240,7 @@ pub async fn cancel_stream(state: State<'_, AppState>, stream_id: String) -> Res
 fn prepare_chat(
     state: &AppState,
     conversation_id: i64,
+    reasoning_effort: Option<String>,
 ) -> Result<(ProviderConfig, ChatRequest), String> {
     let conn = state.db.lock().unwrap();
     let conversation = db::get_conversation(&conn, conversation_id)
@@ -226,11 +258,13 @@ fn prepare_chat(
         messages.push(ChatMessage {
             role: "system".into(),
             content: system_prompt.clone(),
+            reasoning: None,
         });
     }
     messages.extend(history.into_iter().map(|m| ChatMessage {
         role: m.role,
         content: m.content,
+        reasoning: m.reasoning,
     }));
 
     Ok((
@@ -238,6 +272,7 @@ fn prepare_chat(
         ChatRequest {
             model: conversation.model,
             messages,
+            reasoning_effort,
         },
     ))
 }
@@ -254,14 +289,59 @@ pub async fn send_message(
     state: State<'_, AppState>,
     conversation_id: i64,
     text: String,
+    reasoning_effort: Option<String>,
 ) -> Result<String, String> {
     {
         let conn = state.db.lock().unwrap();
-        db::insert_message(&conn, conversation_id, "user", &text, None, None, None, None, None)
-            .map_err(db_err)?;
+        db::insert_message(
+            &conn,
+            conversation_id,
+            "user",
+            &text,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        .map_err(db_err)?;
+
+        // If conversation is still named "New chat", auto-set its title from the first word
+        if let Ok(Some(conv)) = db::get_conversation(&conn, conversation_id) {
+            if conv.title == "New chat" {
+                let first_word = text
+                    .trim()
+                    .split_whitespace()
+                    .next()
+                    .unwrap_or("")
+                    .trim_matches(|c: char| !c.is_alphanumeric());
+                let title = if !first_word.is_empty() {
+                    first_word.to_string()
+                } else {
+                    text.trim().chars().take(20).collect()
+                };
+                if !title.is_empty() {
+                    let _ = db::rename_conversation(&conn, conversation_id, &title);
+                }
+            }
+        }
     }
 
-    let (provider_cfg, chat_request) = prepare_chat(&state, conversation_id)?;
+    start_stream(app, &state, conversation_id, reasoning_effort).await
+}
+
+/// Shared by `send_message` (history already has the new user turn appended)
+/// and `retry_message` (the failed/unwanted assistant turn has already been
+/// deleted) - both just need to run the provider against whatever history
+/// currently exists and stream the result back.
+async fn start_stream(
+    app: AppHandle,
+    state: &AppState,
+    conversation_id: i64,
+    reasoning_effort: Option<String>,
+) -> Result<String, String> {
+    let (provider_cfg, chat_request) = prepare_chat(state, conversation_id, reasoning_effort)?;
     let model = chat_request.model.clone();
     let provider_id = provider_cfg.id.clone();
 
@@ -284,6 +364,7 @@ pub async fn send_message(
         let channel = format!("stream://{stream_id_for_task}");
         let started = Instant::now();
         let mut full_text = String::new();
+        let mut full_reasoning = String::new();
         let mut pending = String::new();
         let mut interval =
             tokio::time::interval(std::time::Duration::from_millis(COALESCE_INTERVAL_MS));
@@ -297,6 +378,7 @@ pub async fn send_message(
                             pending.push_str(&text);
                         }
                         Some(StreamEvent::Reasoning { text }) => {
+                            full_reasoning.push_str(&text);
                             let _ = app_for_task.emit(&channel, StreamEvent::Reasoning { text });
                         }
                         Some(_) => {}
@@ -337,11 +419,13 @@ pub async fn send_message(
         };
         if !full_text.is_empty() {
             let conn = app_state.db.lock().unwrap();
+            let reasoning = (!full_reasoning.is_empty()).then_some(full_reasoning.as_str());
             let _ = db::insert_message(
                 &conn,
                 conversation_id,
                 "assistant",
                 &full_text,
+                reasoning,
                 Some(&provider_id),
                 Some(&model),
                 Some(duration_ms),

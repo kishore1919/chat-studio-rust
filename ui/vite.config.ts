@@ -1,12 +1,18 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
+import path from 'node:path'
 
 const host = process.env.TAURI_DEV_HOST
 
 // https://tauri.app/develop/#frontend
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  resolve: {
+    alias: {
+      '@': path.resolve(import.meta.dirname, './src'),
+    },
+  },
 
   // Tauri expects a fixed port, fails if occupied.
   clearScreen: false,

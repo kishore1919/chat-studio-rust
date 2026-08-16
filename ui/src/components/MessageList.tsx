@@ -3,6 +3,7 @@ import { Virtuoso, type VirtuosoHandle } from 'react-virtuoso'
 import { useChatStore } from '../store/chat'
 import { MessageBubble } from './MessageBubble'
 import { StreamingBubble } from './StreamingBubble'
+import { EmptyChatState } from './EmptyChatState'
 import type { Message } from '../lib/types'
 
 interface MessageListProps {
@@ -33,6 +34,10 @@ export function MessageList({ conversationId }: MessageListProps) {
     virtuosoRef.current?.scrollToIndex({ index: messages.length - 1, align: 'end' })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conversationId])
+
+  if (messages.length === 0 && !isStreamingHere) {
+    return <EmptyChatState />
+  }
 
   return (
     <Virtuoso

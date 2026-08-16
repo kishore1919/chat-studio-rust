@@ -3,7 +3,7 @@ import { Sidebar } from '../components/Sidebar'
 import { ChatHeader } from '../components/ChatHeader'
 import { MessageList } from '../components/MessageList'
 import { Composer } from '../components/Composer'
-import { ErrorToast } from '../components/ErrorToast'
+import { EmptyChatState } from '../components/EmptyChatState'
 import { useChatStore } from '../store/chat'
 
 interface ChatProps {
@@ -26,18 +26,15 @@ export function Chat({ onOpenSettings }: ChatProps) {
   }, [onOpenSettings])
 
   return (
-    <div className="flex h-full">
+    <div className="flex h-full w-full overflow-hidden bg-background">
       <Sidebar collapsed={sidebarCollapsed} />
-      <div className="relative flex min-w-0 flex-1 flex-col">
-        <ErrorToast />
+      <div className="relative flex min-w-0 flex-1 flex-col overflow-hidden">
         <ChatHeader
           onToggleSidebar={() => setSidebarCollapsed((v) => !v)}
           onOpenSettings={onOpenSettings}
         />
         {activeConversationId === null ? (
-          <div className="flex flex-1 items-center justify-center text-[var(--text-muted)]">
-            Select or start a conversation
-          </div>
+          <EmptyChatState />
         ) : (
           <MessageList conversationId={activeConversationId} />
         )}

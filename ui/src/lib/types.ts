@@ -12,6 +12,7 @@ export interface ProviderConfig {
   api_key: string
   enabled: boolean
   extra_headers: Record<string, string>
+  models: string[]
 }
 
 export type ThemePreference = 'light' | 'dark' | 'system'
@@ -31,6 +32,7 @@ export interface Conversation {
   provider: string
   model: string
   system_prompt: string | null
+  pinned: boolean
   created_at: number
   updated_at: number
 }
@@ -42,6 +44,7 @@ export interface Message {
   conversation_id: number
   role: Role
   content: string
+  reasoning: string | null
   provider: string | null
   model: string | null
   duration_ms: number | null

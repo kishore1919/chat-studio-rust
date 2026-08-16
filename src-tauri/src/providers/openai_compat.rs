@@ -130,11 +130,25 @@ impl Provider for OpenAiCompatProvider {
         tx: mpsc::Sender<StreamEvent>,
         cancel: CancellationToken,
     ) -> ProviderResult<Usage> {
-        let body = json!({
+        let mut body = json!({
             "model": req.model,
             "messages": req.messages,
             "stream": true,
         });
+
+        if let Some(effort) = req.reasoning_effort {
+            if effort == "low" || effort == "medium" || effort == "high" {
+                let max_tokens = match effort.as_str() {
+                    "low" => 2048,
+                    "high" => 8192,
+                    _ => 4096,
+                };
+                body["reasoning"] = json!({
+                    "effort": effort,
+                    "max_tokens": max_tokens,
+                });
+            }
+        }
 
         let resp = self
             .request(reqwest::Method::POST, "/chat/completions")

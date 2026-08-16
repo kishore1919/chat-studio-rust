@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { ipc, listenToStream } from '../lib/ipc'
 import type { Conversation, Message } from '../lib/types'
+import { useSettingsStore } from './settings'
 
 const PAGE_SIZE = 50
 
@@ -27,11 +28,15 @@ interface ChatState {
   loadOlderMessages: (conversationId: number) => Promise<void>
   createConversation: (provider: string, model: string) => Promise<Conversation>
   renameConversation: (id: number, title: string) => Promise<void>
+  pinConversation: (id: number, pinned: boolean) => Promise<void>
+  clearConversation: (id: number) => Promise<void>
   setConversationModel: (id: number, provider: string, model: string) => Promise<void>
   editMessage: (message: Message, content: string) => Promise<void>
   deleteMessage: (message: Message) => Promise<void>
   deleteConversation: (id: number) => Promise<void>
-  sendMessage: (text: string) => Promise<void>
+  deleteConversations: (ids: number[]) => Promise<void>
+  sendMessage: (text: string, reasoningEffort?: string | null) => Promise<void>
+  retryMessage: (message: Message, reasoningEffort?: string | null) => Promise<void>
   cancelStream: () => Promise<void>
 }
 
@@ -46,6 +51,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
   loadConversations: async () => {
     const conversations = await ipc.listConversations()
     set({ conversations })
+    if (get().activeConversationId === null && conversations.length > 0) {
+      await get().selectConversation(conversations[0].id)
+    }
   },
 
   selectConversation: async (id) => {
@@ -103,6 +111,25 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }))
   },
 
+  pinConversation: async (id, pinned) => {
+    await ipc.pinConversation(id, pinned)
+    set((s) => ({
+      // Mirrors the backend's `ORDER BY pinned DESC, updated_at DESC` so the
+      // sidebar re-sorts immediately instead of waiting for a refetch.
+      conversations: s.conversations
+        .map((c) => (c.id === id ? { ...c, pinned } : c))
+        .sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.updated_at - a.updated_at),
+    }))
+  },
+
+  clearConversation: async (id) => {
+    await ipc.clearConversation(id)
+    set((s) => ({
+      messagesByConversation: { ...s.messagesByConversation, [id]: [] },
+      hasMoreByConversation: { ...s.hasMoreByConversation, [id]: false },
+    }))
+  },
+
   deleteConversation: async (id) => {
     await ipc.deleteConversation(id)
     set((s) => {
@@ -111,6 +138,26 @@ export const useChatStore = create<ChatState>((set, get) => ({
         conversations: s.conversations.filter((c) => c.id !== id),
         messagesByConversation: rest,
         activeConversationId: s.activeConversationId === id ? null : s.activeConversationId,
+      }
+    })
+  },
+
+  deleteConversations: async (ids) => {
+    await Promise.all(ids.map((id) => ipc.deleteConversation(id)))
+    const idSet = new Set(ids)
+    set((s) => {
+      const rest = { ...s.messagesByConversation }
+      for (const id of ids) {
+        delete rest[id]
+      }
+      const nextConversations = s.conversations.filter((c) => !idSet.has(c.id))
+      return {
+        conversations: nextConversations,
+        messagesByConversation: rest,
+        activeConversationId:
+          s.activeConversationId && idSet.has(s.activeConversationId)
+            ? (nextConversations[0]?.id ?? null)
+            : s.activeConversationId,
       }
     })
   },
@@ -139,15 +186,22 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }))
   },
 
-  sendMessage: async (text) => {
-    const conversationId = get().activeConversationId
-    if (conversationId === null) return
+  sendMessage: async (text, reasoningEffort) => {
+    let conversationId = get().activeConversationId
+    if (conversationId === null) {
+      const settings = useSettingsStore.getState().settings
+      const providerId = settings?.default_provider ?? settings?.providers[0]?.id ?? 'default'
+      const model = settings?.default_model ?? ''
+      const conv = await get().createConversation(providerId, model)
+      conversationId = conv.id
+    }
 
     const optimisticUser: Message = {
       id: -Date.now(),
       conversation_id: conversationId,
       role: 'user',
       content: text,
+      reasoning: null,
       provider: null,
       model: null,
       duration_ms: null,
@@ -163,66 +217,58 @@ export const useChatStore = create<ChatState>((set, get) => ({
       error: null,
     }))
 
-    const streamId = await ipc.sendMessage(conversationId, text)
-    set({ streaming: { streamId, conversationId, text: '', reasoning: '' } })
+    // If conversation is named "New chat", immediately update the title to the first word
+    const currentConv = get().conversations.find((c) => c.id === conversationId)
+    if (currentConv && currentConv.title === 'New chat') {
+      const firstWord = text.trim().split(/\s+/)[0]?.replace(/^[^\w]+|[^\w]+$/g, '') || text.trim().slice(0, 20)
+      if (firstWord) {
+        set((s) => ({
+          conversations: s.conversations.map((c) =>
+            c.id === conversationId ? { ...c, title: firstWord } : c,
+          ),
+        }))
+      }
+    }
 
-    const unlisten = await listenToStream(streamId, (event) => {
-      const current = get().streaming
-      if (!current || current.streamId !== streamId) return
+    const streamId = await ipc.sendMessage(conversationId, text, reasoningEffort)
+    attachStreamListener(set, get, conversationId, streamId)
+  },
 
-      if (event.type === 'delta') {
-        set({ streaming: { ...current, text: current.text + event.text } })
-      } else if (event.type === 'reasoning') {
-        set({ streaming: { ...current, reasoning: current.reasoning + event.text } })
-      } else if (event.type === 'done') {
-        const finished: Message = {
-          id: -Date.now() - 1,
-          conversation_id: conversationId,
-          role: 'assistant',
-          content: current.text,
-          provider: null,
-          model: null,
-          duration_ms: event.duration_ms,
-          tokens_in: event.tokens_in,
-          tokens_out: event.tokens_out,
-          created_at: Math.floor(Date.now() / 1000),
-        }
+  retryMessage: async (message, reasoningEffort) => {
+    const conversationId = message.conversation_id
+    if (get().activeConversationId !== conversationId) return
+
+    if (message.role === 'user') {
+      const messages = get().messagesByConversation[conversationId] ?? []
+      const nextAssistant = messages.find((m) => m.id > message.id)
+      if (nextAssistant) {
         set((s) => ({
           messagesByConversation: {
             ...s.messagesByConversation,
-            [conversationId]: [...(s.messagesByConversation[conversationId] ?? []), finished],
+            [conversationId]: (s.messagesByConversation[conversationId] ?? []).filter(
+              (m) => m.id <= message.id,
+            ),
           },
-          streaming: null,
+          error: null,
         }))
-        unlisten()
-      } else if (event.type === 'error') {
-        // The backend persists whatever text arrived before the error, so
-        // the frontend must do the same - otherwise a mid-stream network
-        // drop would silently discard output the user already saw.
-        if (current.text) {
-          const partial: Message = {
-            id: -Date.now() - 1,
-            conversation_id: conversationId,
-            role: 'assistant',
-            content: current.text,
-            provider: null,
-            model: null,
-            duration_ms: null,
-            tokens_in: null,
-            tokens_out: null,
-            created_at: Math.floor(Date.now() / 1000),
-          }
-          set((s) => ({
-            messagesByConversation: {
-              ...s.messagesByConversation,
-              [conversationId]: [...(s.messagesByConversation[conversationId] ?? []), partial],
-            },
-          }))
-        }
-        set({ streaming: null, error: event.message })
-        unlisten()
+        const streamId = await ipc.retryMessage(conversationId, nextAssistant.id, reasoningEffort)
+        attachStreamListener(set, get, conversationId, streamId)
+        return
       }
-    })
+    }
+
+    set((s) => ({
+      messagesByConversation: {
+        ...s.messagesByConversation,
+        [conversationId]: (s.messagesByConversation[conversationId] ?? []).filter(
+          (m) => m.id < message.id,
+        ),
+      },
+      error: null,
+    }))
+
+    const streamId = await ipc.retryMessage(conversationId, message.id, reasoningEffort)
+    attachStreamListener(set, get, conversationId, streamId)
   },
 
   cancelStream: async () => {
@@ -231,6 +277,80 @@ export const useChatStore = create<ChatState>((set, get) => ({
     await ipc.cancelStream(streaming.streamId)
   },
 }))
+
+type Set = (
+  partial:
+    | Partial<ChatState>
+    | ((state: ChatState) => Partial<ChatState>),
+) => void
+type Get = () => ChatState
+
+/** Shared by sendMessage and retryMessage - both just kick off a stream_id
+ * on the backend and then need to accumulate the same delta/reasoning/done/
+ * error events onto it. */
+async function attachStreamListener(set: Set, get: Get, conversationId: number, streamId: string) {
+  set({ streaming: { streamId, conversationId, text: '', reasoning: '' } })
+
+  const unlisten = await listenToStream(streamId, (event) => {
+    const current = get().streaming
+    if (!current || current.streamId !== streamId) return
+
+    if (event.type === 'delta') {
+      set({ streaming: { ...current, text: current.text + event.text } })
+    } else if (event.type === 'reasoning') {
+      set({ streaming: { ...current, reasoning: current.reasoning + event.text } })
+    } else if (event.type === 'done') {
+      const finished: Message = {
+        id: -Date.now() - 1,
+        conversation_id: conversationId,
+        role: 'assistant',
+        content: current.text,
+        reasoning: current.reasoning || null,
+        provider: null,
+        model: null,
+        duration_ms: event.duration_ms,
+        tokens_in: event.tokens_in,
+        tokens_out: event.tokens_out,
+        created_at: Math.floor(Date.now() / 1000),
+      }
+      set((s) => ({
+        messagesByConversation: {
+          ...s.messagesByConversation,
+          [conversationId]: [...(s.messagesByConversation[conversationId] ?? []), finished],
+        },
+        streaming: null,
+      }))
+      unlisten()
+    } else if (event.type === 'error') {
+      // The backend persists whatever text arrived before the error, so the
+      // frontend must do the same - otherwise a mid-stream network drop
+      // would silently discard output the user already saw.
+      if (current.text) {
+        const partial: Message = {
+          id: -Date.now() - 1,
+          conversation_id: conversationId,
+          role: 'assistant',
+          content: current.text,
+          reasoning: current.reasoning || null,
+          provider: null,
+          model: null,
+          duration_ms: null,
+          tokens_in: null,
+          tokens_out: null,
+          created_at: Math.floor(Date.now() / 1000),
+        }
+        set((s) => ({
+          messagesByConversation: {
+            ...s.messagesByConversation,
+            [conversationId]: [...(s.messagesByConversation[conversationId] ?? []), partial],
+          },
+        }))
+      }
+      set({ streaming: null, error: event.message })
+      unlisten()
+    }
+  })
+}
 
 /** Selector-only hook: subscribes solely to the in-flight text, so only the
  * streaming bubble re-renders per flush - never the settled message list. */
