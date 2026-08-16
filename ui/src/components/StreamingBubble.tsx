@@ -22,22 +22,26 @@ export function StreamingBubble() {
   const isThinkingActive = hasReasoning && !displayText
 
   return (
-    <div className="px-4 py-2.5">
-      <div className="mb-1 flex items-center gap-2 text-[13px]">
-        <span className="font-semibold text-foreground">Assistant</span>
-        <span className="inline-block size-1.5 animate-pulse rounded-full bg-primary" />
-      </div>
+    <div className="flex justify-start px-4 py-2">
+      <div className="max-w-[92%] min-w-0">
+        <div className="rounded-2xl rounded-tl-xs bg-[var(--bubble-assistant)] border border-border/70 px-4 py-3 shadow-xs">
+          <div className="mb-2 flex items-center gap-2 text-[12px]">
+            <span className="font-semibold text-foreground">Assistant</span>
+            <span className="inline-block size-1.5 animate-pulse rounded-full bg-primary" />
+          </div>
 
-      {displayReasoning && (
-        <ThinkingBar reasoning={displayReasoning} isStreaming={isThinkingActive} />
-      )}
+          {displayReasoning && (
+            <ThinkingBar reasoning={displayReasoning} isStreaming={isThinkingActive} />
+          )}
 
-      {displayText && (
-        <div className="text-[14px] leading-relaxed whitespace-pre-wrap break-words text-foreground font-sans">
-          {displayText}
-          <span className="ml-0.5 inline-block h-4 w-1.5 animate-pulse bg-primary align-text-bottom" />
+          {displayText && (
+            <div className="text-[14px] leading-relaxed whitespace-pre-wrap break-words text-foreground font-sans">
+              {displayText}
+              <span className="ml-0.5 inline-block h-4 w-1.5 animate-pulse bg-primary align-text-bottom" />
+            </div>
+          )}
         </div>
-      )}
+      </div>
     </div>
   )
 }
