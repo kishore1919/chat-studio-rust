@@ -285,6 +285,19 @@ pub fn delete_message_and_after(
     Ok(())
 }
 
+pub fn delete_messages_after(
+    conn: &Connection,
+    conversation_id: i64,
+    message_id: i64,
+) -> rusqlite::Result<()> {
+    conn.execute(
+        "DELETE FROM messages WHERE conversation_id = ?1 AND id > ?2",
+        params![conversation_id, message_id],
+    )?;
+    touch_conversation(conn, conversation_id)?;
+    Ok(())
+}
+
 pub fn get_conversation(conn: &Connection, id: i64) -> rusqlite::Result<Option<Conversation>> {
     conn.query_row(
         &format!("SELECT {CONVERSATION_COLUMNS} FROM conversations WHERE id = ?1"),

@@ -1,4 +1,4 @@
-import { memo, useMemo, useState } from 'react'
+import { memo, useMemo, useState, type KeyboardEvent } from 'react'
 import {
   CheckIcon,
   ChevronDownIcon,
@@ -6,6 +6,7 @@ import {
   CopyIcon,
   PencilIcon,
   RotateCcwIcon,
+  SendIcon,
   Trash2Icon,
 } from 'lucide-react'
 import type { Message } from '../lib/types'
@@ -39,7 +40,7 @@ function MessageBubbleImpl({ message }: MessageBubbleProps) {
   const [draft, setDraft] = useState(message.content)
   const [copied, setCopied] = useState(false)
 
-  const editMessage = useChatStore((s) => s.editMessage)
+  const editAndResendMessage = useChatStore((s) => s.editAndResendMessage)
   const deleteMessage = useChatStore((s) => s.deleteMessage)
   const retryMessage = useChatStore((s) => s.retryMessage)
   const isStreaming = useChatStore((s) => s.streaming !== null)
@@ -74,10 +75,19 @@ function MessageBubbleImpl({ message }: MessageBubbleProps) {
   }
 
   const commitEdit = () => {
-    if (draft.trim() && draft !== message.content) {
-      editMessage(message, draft.trim())
+    if (draft.trim() && !isStreaming) {
+      editAndResendMessage(message, draft.trim())
     }
     setEditing(false)
+  }
+
+  const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      commitEdit()
+    } else if (e.key === 'Escape') {
+      setEditing(false)
+    }
   }
 
   const actions = (
@@ -107,7 +117,8 @@ function MessageBubbleImpl({ message }: MessageBubbleProps) {
         variant="ghost"
         size="icon-sm"
         className="size-6 text-muted-foreground hover:text-foreground"
-        title="Edit"
+        title="Edit & Resend"
+        disabled={isStreaming}
         onClick={startEdit}
       >
         <PencilIcon className="size-3" />
@@ -130,6 +141,7 @@ function MessageBubbleImpl({ message }: MessageBubbleProps) {
         autoFocus
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
+        onKeyDown={handleKeyDown}
         rows={Math.min(8, Math.max(2, draft.split('\n').length))}
         className="w-full resize-y border-0 bg-transparent p-0 text-[13px] shadow-none focus-visible:ring-0"
       />
@@ -137,8 +149,14 @@ function MessageBubbleImpl({ message }: MessageBubbleProps) {
         <Button variant="ghost" size="sm" onClick={() => setEditing(false)}>
           Cancel
         </Button>
-        <Button size="sm" onClick={commitEdit}>
-          Save
+        <Button
+          size="sm"
+          onClick={commitEdit}
+          disabled={!draft.trim() || isStreaming}
+          className="gap-1.5 text-xs font-medium"
+        >
+          <SendIcon className="size-3.5" />
+          <span>Send</span>
         </Button>
       </div>
     </div>

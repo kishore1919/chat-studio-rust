@@ -31,6 +31,7 @@ interface ChatState {
   setConversationModel: (id: number, provider: string, model: string) => Promise<void>
   setActiveAgentId: (agentId: string | null) => void
   editMessage: (message: Message, content: string) => Promise<void>
+  editAndResendMessage: (message: Message, content: string, reasoningEffort?: string | null) => Promise<void>
   deleteMessage: (message: Message) => Promise<void>
   deleteConversation: (id: number) => Promise<void>
   deleteConversations: (ids: number[]) => Promise<void>
@@ -174,6 +175,29 @@ export const useChatStore = create<ChatState>((set, get) => ({
         ),
       },
     }))
+  },
+
+  editAndResendMessage: async (message, content, reasoningEffort) => {
+    const conversationId = message.conversation_id
+    if (get().activeConversationId !== conversationId) return
+
+    set((s) => ({
+      messagesByConversation: {
+        ...s.messagesByConversation,
+        [conversationId]: (s.messagesByConversation[conversationId] ?? [])
+          .filter((m) => m.id <= message.id)
+          .map((m) => (m.id === message.id ? { ...m, content } : m)),
+      },
+      error: null,
+    }))
+
+    const streamId = await ipc.editAndResendMessage(
+      conversationId,
+      message.id,
+      content,
+      reasoningEffort,
+    )
+    attachStreamListener(set, get, conversationId, streamId)
   },
 
   deleteMessage: async (message) => {

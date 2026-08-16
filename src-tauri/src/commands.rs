@@ -112,6 +112,23 @@ pub async fn retry_message(
 }
 
 #[tauri::command]
+pub async fn edit_and_resend_message(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    conversation_id: i64,
+    message_id: i64,
+    content: String,
+    reasoning_effort: Option<String>,
+) -> Result<String, String> {
+    {
+        let conn = state.db.lock().unwrap();
+        db::edit_message(&conn, message_id, &content).map_err(db_err)?;
+        db::delete_messages_after(&conn, conversation_id, message_id).map_err(db_err)?;
+    }
+    start_stream(app, &state, conversation_id, reasoning_effort).await
+}
+
+#[tauri::command]
 pub fn get_settings(state: State<AppState>) -> Settings {
     state.settings.lock().unwrap().clone()
 }

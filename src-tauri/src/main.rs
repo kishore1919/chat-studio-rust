@@ -43,6 +43,7 @@ fn main() {
             commands::delete_message,
             commands::send_message,
             commands::retry_message,
+            commands::edit_and_resend_message,
             commands::cancel_stream,
             commands::list_models,
             commands::get_settings,

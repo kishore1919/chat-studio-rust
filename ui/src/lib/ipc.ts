@@ -48,6 +48,19 @@ export const ipc = {
   editMessage: (messageId: number, content: string) =>
     invoke<void>('edit_message', { messageId, content }),
 
+  editAndResendMessage: (
+    conversationId: number,
+    messageId: number,
+    content: string,
+    reasoningEffort?: string | null,
+  ) =>
+    invoke<string>('edit_and_resend_message', {
+      conversationId,
+      messageId,
+      content,
+      reasoningEffort: reasoningEffort ?? null,
+    }),
+
   deleteMessage: (messageId: number) => invoke<void>('delete_message', { messageId }),
 
   listModels: (providerId: string, forceRefresh: boolean) =>
