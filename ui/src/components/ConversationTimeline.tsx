@@ -33,65 +33,71 @@ export function ConversationTimeline({
     return list
   }, [messages])
 
+  // Only show if there is at least 1 turn
   if (turns.length === 0) return null
 
   return (
-    <div className="absolute right-2 top-1/2 -translate-y-1/2 z-30 flex flex-col items-end gap-2.5 py-4 px-1 select-none pointer-events-auto">
-      {turns.map((turn, index) => {
-        const isHovered = hoveredIndex === index
-        const isCurrent =
-          activeMessageId === turn.userMessage.id ||
-          activeMessageId === turn.assistantMessage?.id ||
-          (activeMessageId == null && index === turns.length - 1)
+    <div className="group/timeline pointer-events-none absolute right-0 top-0 bottom-0 z-30 flex w-10 items-center justify-end pr-1.5 select-none">
+      {/* Subtle background track that fades in on hover */}
+      <div className="pointer-events-auto flex flex-col items-end gap-2.5 py-4 px-1 opacity-15 transition-opacity duration-300 group-hover/timeline:opacity-100">
+        {turns.map((turn, index) => {
+          const isHovered = hoveredIndex === index
+          const isCurrent =
+            activeMessageId === turn.userMessage.id ||
+            activeMessageId === turn.assistantMessage?.id ||
+            (activeMessageId == null && index === turns.length - 1)
 
-        // Clean text previews
-        const userPreview = turn.userMessage.content.trim().split('\n')[0] || 'User prompt'
-        const assistantRaw = turn.assistantMessage?.content?.trim() || ''
-        const assistantClean = assistantRaw
-          .replace(/<think>[\s\S]*?<\/think>/gi, '')
-          .replace(/%%TOOL_CALL_\d+%%/g, '')
-          .trim()
-        const assistantPreview =
-          assistantClean.split('\n')[0] || (turn.assistantMessage ? 'Assistant reply' : '')
+          // Clean text previews
+          const userPreview = turn.userMessage.content.trim().split('\n')[0] || 'User prompt'
+          const assistantRaw = turn.assistantMessage?.content?.trim() || ''
+          const assistantClean = assistantRaw
+            .replace(/<think>[\s\S]*?<\/think>/gi, '')
+            .replace(/%%TOOL_CALL_\d+%%/g, '')
+            .trim()
+          const assistantPreview =
+            assistantClean.split('\n')[0] || (turn.assistantMessage ? 'Assistant reply' : '')
 
-        return (
-          <div
-            key={turn.userMessage.id}
-            className="relative flex items-center justify-end group"
-            onMouseEnter={() => setHoveredIndex(index)}
-            onMouseLeave={() => setHoveredIndex(null)}
-          >
-            {/* Floating Preview Card on Hover */}
-            {isHovered && (
-              <div
-                onClick={() => onScrollToMessage(turn.userMessage.id)}
-                className="absolute right-7 top-1/2 -translate-y-1/2 z-40 w-72 rounded-xl border border-border/80 bg-card/95 p-3 text-left shadow-2xl backdrop-blur-md transition-all animate-in fade-in zoom-in-95 cursor-pointer pointer-events-auto"
-              >
-                <div className="font-semibold text-xs text-foreground line-clamp-2 leading-snug">
-                  {userPreview}
-                </div>
-                {assistantPreview && (
-                  <div className="mt-1 text-[11px] text-muted-foreground line-clamp-3 leading-relaxed">
-                    {assistantPreview}
+          return (
+            <div
+              key={turn.userMessage.id}
+              className="relative flex items-center justify-end"
+              onMouseEnter={() => setHoveredIndex(index)}
+              onMouseLeave={() => setHoveredIndex(null)}
+            >
+              {/* Floating Preview Card on Hover */}
+              {isHovered && (
+                <div
+                  onClick={() => onScrollToMessage(turn.userMessage.id)}
+                  className="absolute right-6 top-1/2 -translate-y-1/2 z-50 w-64 rounded-xl border border-border/80 bg-popover/95 p-3 text-left shadow-xl backdrop-blur-md transition-all animate-in fade-in zoom-in-95 cursor-pointer pointer-events-auto"
+                >
+                  <div className="font-semibold text-xs text-foreground line-clamp-2 leading-snug">
+                    {userPreview}
                   </div>
-                )}
-              </div>
-            )}
+                  {assistantPreview && (
+                    <div className="mt-1 text-[11px] text-muted-foreground line-clamp-3 leading-relaxed">
+                      {assistantPreview}
+                    </div>
+                  )}
+                </div>
+              )}
 
-            {/* Horizontal Line Dash */}
-            <button
-              type="button"
-              onClick={() => onScrollToMessage(turn.userMessage.id)}
-              className={`block rounded-full transition-all duration-200 cursor-pointer ${
-                isHovered || isCurrent
-                  ? 'h-[2.5px] w-6 bg-foreground shadow-xs'
-                  : 'h-[2px] w-3 bg-muted-foreground/40 hover:w-5 hover:bg-foreground/80'
-              }`}
-              title={`Turn #${index + 1}: ${userPreview}`}
-            />
-          </div>
-        )
-      })}
+              {/* Horizontal Line Dash */}
+              <button
+                type="button"
+                onClick={() => onScrollToMessage(turn.userMessage.id)}
+                className={`block rounded-full transition-all duration-200 cursor-pointer ${
+                  isHovered
+                    ? 'h-[2px] w-6 bg-foreground shadow-xs'
+                    : isCurrent
+                      ? 'h-[2px] w-4.5 bg-foreground/90'
+                      : 'h-[1.5px] w-2.5 bg-muted-foreground/50 hover:w-5 hover:bg-foreground'
+                }`}
+                title={`Turn #${index + 1}: ${userPreview}`}
+              />
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }
