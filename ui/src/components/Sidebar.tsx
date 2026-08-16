@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   CheckSquareIcon,
+  ChevronRightIcon,
   MoreHorizontalIcon,
   PencilIcon,
   PinIcon,
@@ -207,6 +208,9 @@ export function Sidebar({ collapsed }: SidebarProps) {
   const settings = useSettingsStore((s) => s.settings)
   const autoCreatedRef = useRef(false)
 
+  const [isHovered, setIsHovered] = useState(false)
+  const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
   const [search, setSearch] = useState('')
   const [isSelectMode, setIsSelectMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
@@ -230,6 +234,18 @@ export function Sidebar({ collapsed }: SidebarProps) {
     autoCreatedRef.current = true
     createConversation(providerId, settings.default_model ?? '')
   }, [settings, conversations, createConversation])
+
+  const handleMouseEnter = () => {
+    if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current)
+    setIsHovered(true)
+  }
+
+  const handleMouseLeave = () => {
+    if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current)
+    hoverTimeoutRef.current = setTimeout(() => {
+      setIsHovered(false)
+    }, 300)
+  }
 
   const handleNewChat = () => {
     if (!settings) return
@@ -281,148 +297,179 @@ export function Sidebar({ collapsed }: SidebarProps) {
     setRenameTarget(null)
   }
 
-  if (collapsed) return null
-
   return (
-    <aside className="flex w-64 shrink-0 flex-col border-r border-border bg-sidebar select-none">
-      {/* Top Search & Multi-Select Bar */}
-      <div className="p-2 space-y-1.5">
-        <div className="flex items-center gap-1.5">
-          <div className="relative flex-1">
-            <SearchIcon className="absolute top-1/2 left-2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search chats..."
-              className="h-8 pl-7 pr-7 text-xs"
-            />
-            {search && (
-              <button
-                type="button"
-                onClick={() => setSearch('')}
-                className="absolute top-1/2 right-2 -translate-y-1/2 text-muted-foreground hover:text-foreground cursor-pointer"
-              >
-                <XIcon className="size-3.5" />
-              </button>
-            )}
+    <>
+      {/* Subtle edge hover trigger strip when collapsed */}
+      {collapsed && (
+        <div
+          onMouseEnter={handleMouseEnter}
+          className="fixed top-0 bottom-0 left-0 z-30 w-3.5 group cursor-pointer"
+          title="Hover to view chats"
+        >
+          <div className="flex h-full w-1 items-center justify-center bg-border/20 group-hover:bg-primary/60 transition-colors">
+            <ChevronRightIcon className="size-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity -ml-0.5" />
           </div>
-
-          <Button
-            variant={isSelectMode ? 'default' : 'outline'}
-            size="icon-sm"
-            onClick={() => {
-              setIsSelectMode((v) => !v)
-              setSelectedIds(new Set())
-            }}
-            className="size-8 shrink-0"
-            title={isSelectMode ? 'Exit select mode' : 'Select multiple chats to delete'}
-          >
-            <CheckSquareIcon className="size-3.5" />
-          </Button>
         </div>
+      )}
 
-        {/* Multi-Select Action Bar */}
-        {isSelectMode && (
-          <div className="flex items-center justify-between rounded-lg bg-accent/40 px-2 py-1 text-xs">
-            <span className="text-[11px] font-medium text-foreground">
-              {selectedIds.size} selected
-            </span>
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
-                onClick={toggleSelectAll}
-                className="text-[11px] text-muted-foreground hover:text-foreground cursor-pointer px-1 py-0.5 rounded"
-              >
-                {selectedIds.size === filtered.length && filtered.length > 0 ? 'Deselect All' : 'Select All'}
-              </button>
-              {selectedIds.size > 0 && (
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  className="h-6 px-2 text-[11px] gap-1"
-                  onClick={() => setConfirmBatchDelete(true)}
+      {/* Main Sidebar */}
+      <aside
+        onMouseEnter={collapsed ? handleMouseEnter : undefined}
+        onMouseLeave={collapsed ? handleMouseLeave : undefined}
+        className={cn(
+          'flex flex-col border-r border-border bg-sidebar select-none transition-all duration-200 ease-out',
+          collapsed
+            ? cn(
+                'fixed top-0 bottom-0 left-0 z-40 w-64 shadow-2xl',
+                isHovered
+                  ? 'translate-x-0 opacity-100 pointer-events-auto'
+                  : '-translate-x-full opacity-0 pointer-events-none',
+              )
+            : 'relative w-64 shrink-0',
+        )}
+      >
+        {/* Top Search & Multi-Select Bar */}
+        <div className="p-2 space-y-1.5">
+          <div className="flex items-center gap-1.5">
+            <div className="relative flex-1">
+              <SearchIcon className="absolute top-1/2 left-2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search chats..."
+                className="h-8 pl-7 pr-7 text-xs"
+              />
+              {search && (
+                <button
+                  type="button"
+                  onClick={() => setSearch('')}
+                  className="absolute top-1/2 right-2 -translate-y-1/2 text-muted-foreground hover:text-foreground cursor-pointer"
                 >
-                  <Trash2Icon className="size-3" />
-                  <span>Delete</span>
-                </Button>
+                  <XIcon className="size-3.5" />
+                </button>
               )}
             </div>
-          </div>
-        )}
-      </div>
 
-      {/* Conversations List */}
-      <div className="flex-1 overflow-y-auto px-2">
-        {grouped.map(([group, items]) => (
-          <div key={group} className="mb-2">
-            <div className="px-3 pb-1 text-[11px] font-medium text-muted-foreground uppercase">
-              {group}
+            <Button
+              variant={isSelectMode ? 'default' : 'outline'}
+              size="icon-sm"
+              onClick={() => {
+                setIsSelectMode((v) => !v)
+                setSelectedIds(new Set())
+              }}
+              className="size-8 shrink-0"
+              title={isSelectMode ? 'Exit select mode' : 'Select multiple chats to delete'}
+            >
+              <CheckSquareIcon className="size-3.5" />
+            </Button>
+          </div>
+
+          {/* Multi-Select Action Bar */}
+          {isSelectMode && (
+            <div className="flex items-center justify-between rounded-lg bg-accent/40 px-2 py-1 text-xs">
+              <span className="text-[11px] font-medium text-foreground">
+                {selectedIds.size} selected
+              </span>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={toggleSelectAll}
+                  className="text-[11px] text-muted-foreground hover:text-foreground cursor-pointer px-1 py-0.5 rounded"
+                >
+                  {selectedIds.size === filtered.length && filtered.length > 0 ? 'Deselect All' : 'Select All'}
+                </button>
+                {selectedIds.size > 0 && (
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    className="h-6 px-2 text-[11px] gap-1"
+                    onClick={() => setConfirmBatchDelete(true)}
+                  >
+                    <Trash2Icon className="size-3" />
+                    <span>Delete</span>
+                  </Button>
+                )}
+              </div>
             </div>
-            {items.map((conv) => (
-              <ConversationRow
-                key={conv.id}
-                conv={conv}
-                active={conv.id === activeConversationId}
-                isSelectMode={isSelectMode}
-                isSelected={selectedIds.has(conv.id)}
-                onToggleSelect={() => toggleSelectConversation(conv.id)}
-                onSelect={() => selectConversation(conv.id)}
-                onRename={() => openRename(conv.id, conv.title)}
-                onTogglePin={() => pinConversation(conv.id, !conv.pinned)}
-                onDelete={() => deleteConversation(conv.id)}
-              />
-            ))}
-          </div>
-        ))}
-        {filtered.length === 0 && (
-          <p className="px-3 py-2 text-[13px] text-muted-foreground">No chats found.</p>
-        )}
-      </div>
+          )}
+        </div>
 
-      <Button onClick={handleNewChat} variant="outline" className="m-2">
-        <PlusIcon /> New chat
-      </Button>
+        {/* Conversations List */}
+        <div className="flex-1 overflow-y-auto px-2">
+          {grouped.map(([group, items]) => (
+            <div key={group} className="mb-2">
+              <div className="px-3 pb-1 text-[11px] font-medium text-muted-foreground uppercase">
+                {group}
+              </div>
+              {items.map((conv) => (
+                <ConversationRow
+                  key={conv.id}
+                  conv={conv}
+                  active={conv.id === activeConversationId}
+                  isSelectMode={isSelectMode}
+                  isSelected={selectedIds.has(conv.id)}
+                  onToggleSelect={() => toggleSelectConversation(conv.id)}
+                  onSelect={() => {
+                    selectConversation(conv.id)
+                    if (collapsed) setIsHovered(false)
+                  }}
+                  onRename={() => openRename(conv.id, conv.title)}
+                  onTogglePin={() => pinConversation(conv.id, !conv.pinned)}
+                  onDelete={() => deleteConversation(conv.id)}
+                />
+              ))}
+            </div>
+          ))}
+          {filtered.length === 0 && (
+            <p className="px-3 py-2 text-[13px] text-muted-foreground">No chats found.</p>
+          )}
+        </div>
 
-      {/* Batch Delete Confirmation Modal */}
-      <Dialog open={confirmBatchDelete} onOpenChange={setConfirmBatchDelete}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Delete {selectedIds.size} conversations?</DialogTitle>
-            <DialogDescription>
-              This will permanently delete {selectedIds.size} selected conversation{selectedIds.size > 1 ? 's' : ''} and their messages. This action cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setConfirmBatchDelete(false)}>
-              Cancel
-            </Button>
-            <Button variant="destructive" onClick={handleBatchDelete}>
-              Delete {selectedIds.size} chat{selectedIds.size > 1 ? 's' : ''}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        <Button onClick={handleNewChat} variant="outline" className="m-2">
+          <PlusIcon /> New chat
+        </Button>
 
-      {/* Rename Modal */}
-      <Dialog open={renameTarget !== null} onOpenChange={(open) => !open && setRenameTarget(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Rename conversation</DialogTitle>
-          </DialogHeader>
-          <Input
-            autoFocus
-            value={renameDraft}
-            onChange={(e) => setRenameDraft(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && commitRename()}
-          />
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setRenameTarget(null)}>
-              Cancel
-            </Button>
-            <Button onClick={commitRename}>Save</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </aside>
+        {/* Batch Delete Confirmation Modal */}
+        <Dialog open={confirmBatchDelete} onOpenChange={setConfirmBatchDelete}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Delete {selectedIds.size} conversations?</DialogTitle>
+              <DialogDescription>
+                This will permanently delete {selectedIds.size} selected conversation{selectedIds.size > 1 ? 's' : ''} and their messages. This action cannot be undone.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setConfirmBatchDelete(false)}>
+                Cancel
+              </Button>
+              <Button variant="destructive" onClick={handleBatchDelete}>
+                Delete {selectedIds.size} chat{selectedIds.size > 1 ? 's' : ''}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Rename Modal */}
+        <Dialog open={renameTarget !== null} onOpenChange={(open) => !open && setRenameTarget(null)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Rename conversation</DialogTitle>
+            </DialogHeader>
+            <Input
+              autoFocus
+              value={renameDraft}
+              onChange={(e) => setRenameDraft(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && commitRename()}
+            />
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setRenameTarget(null)}>
+                Cancel
+              </Button>
+              <Button onClick={commitRename}>Save</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </aside>
+    </>
   )
 }

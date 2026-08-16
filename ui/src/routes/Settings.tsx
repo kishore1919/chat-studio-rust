@@ -26,11 +26,14 @@ import {
 } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
 
+import { McpPane } from '../components/McpPane'
+import { SkillsPane } from '../components/SkillsPane'
+
 interface SettingsProps {
   onBack: () => void
 }
 
-type NavSection = 'model-provider' | 'default-model' | 'appearance' | 'data'
+type NavSection = 'model-provider' | 'default-model' | 'mcp' | 'skills' | 'appearance' | 'data'
 
 const NAV_GROUPS: { label: string; items: { id: NavSection; label: string }[] }[] = [
   {
@@ -38,6 +41,13 @@ const NAV_GROUPS: { label: string; items: { id: NavSection; label: string }[] }[
     items: [
       { id: 'model-provider', label: 'Model Provider' },
       { id: 'default-model', label: 'Default Model' },
+    ],
+  },
+  {
+    label: 'Tools & Skills',
+    items: [
+      { id: 'mcp', label: 'MCP Servers' },
+      { id: 'skills', label: 'Skills & Prompts' },
     ],
   },
   {
@@ -78,7 +88,7 @@ export function Settings({ onBack }: SettingsProps) {
                   key={item.id}
                   onClick={() => setSection(item.id)}
                   className={cn(
-                    'block w-full rounded-lg px-2 py-1.5 text-left text-[13px] transition-colors',
+                    'block w-full rounded-lg px-2 py-1.5 text-left text-[13px] transition-colors cursor-pointer',
                     section === item.id ? 'bg-accent font-medium text-foreground' : 'hover:bg-accent/60 text-muted-foreground hover:text-foreground',
                   )}
                 >
@@ -91,6 +101,8 @@ export function Settings({ onBack }: SettingsProps) {
         <div className="min-w-0 flex-1 overflow-y-auto p-4">
           {section === 'model-provider' && <ModelProviderPane />}
           {section === 'default-model' && <DefaultModelPane />}
+          {section === 'mcp' && <McpPane />}
+          {section === 'skills' && <SkillsPane />}
           {section === 'appearance' && <AppearancePane />}
           {section === 'data' && <DataPane />}
         </div>

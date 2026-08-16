@@ -463,3 +463,47 @@ async fn start_stream(
 
     Ok(stream_id)
 }
+
+#[tauri::command]
+pub async fn test_mcp_server(
+    command: String,
+    args: Vec<String>,
+    env: std::collections::BTreeMap<String, String>,
+) -> Result<Vec<crate::mcp::McpTool>, String> {
+    crate::mcp::query_tools("test", "test", &command, &args, &env).await
+}
+
+#[tauri::command]
+pub async fn list_mcp_tools(state: State<'_, AppState>) -> Result<Vec<crate::mcp::McpTool>, String> {
+    let servers = {
+        let settings = state.settings.lock().unwrap();
+        settings.mcp_servers.clone()
+    };
+
+    let mut all_tools = Vec::new();
+    for s in servers {
+        if !s.enabled {
+            continue;
+        }
+        if let Ok(tools) = crate::mcp::query_tools(&s.id, &s.name, &s.command, &s.args, &s.env).await {
+            all_tools.extend(tools);
+        }
+    }
+    Ok(all_tools)
+}
+
+#[tauri::command]
+pub async fn call_mcp_tool(
+    state: State<'_, AppState>,
+    server_id: String,
+    tool_name: String,
+    arguments: serde_json::Value,
+) -> Result<String, String> {
+    let server = {
+        let settings = state.settings.lock().unwrap();
+        settings.mcp_servers.iter().find(|s| s.id == server_id).cloned()
+    };
+
+    let server = server.ok_or_else(|| format!("MCP Server '{}' not found", server_id))?;
+    crate::mcp::execute_tool(&server.command, &server.args, &server.env, &tool_name, &arguments).await
+}

@@ -36,6 +36,74 @@ fn default_true() -> bool {
     true
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct McpServerConfig {
+    pub id: String,
+    pub name: String,
+    pub command: String,
+    #[serde(default)]
+    pub args: Vec<String>,
+    #[serde(default)]
+    pub env: std::collections::BTreeMap<String, String>,
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct Skill {
+    pub id: String,
+    pub name: String,
+    pub description: String,
+    pub system_prompt: String,
+    #[serde(default)]
+    pub slash_command: String,
+    #[serde(default)]
+    pub icon: String,
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+}
+
+fn default_skills() -> Vec<Skill> {
+    vec![
+        Skill {
+            id: "code-review".into(),
+            name: "Code Reviewer".into(),
+            description: "Thorough code reviews with bug detection and idiomatic suggestions.".into(),
+            system_prompt: "You are an expert software engineer. Review the provided code for correctness, security vulnerabilities, edge cases, performance, and readability. Provide concrete code diffs or examples for improvements.".into(),
+            slash_command: "review".into(),
+            icon: "code".into(),
+            enabled: true,
+        },
+        Skill {
+            id: "summarize".into(),
+            name: "Summarizer".into(),
+            description: "Extract executive bullet points and key takeaways.".into(),
+            system_prompt: "You are a concise executive summarizer. Analyze the text provided and give a high-level summary followed by numbered key takeaways and actionable conclusions.".into(),
+            slash_command: "summarize".into(),
+            icon: "file-text".into(),
+            enabled: true,
+        },
+        Skill {
+            id: "problem-solver".into(),
+            name: "Problem Solver".into(),
+            description: "Step-by-step reasoning for complex logic, math, and algorithms.".into(),
+            system_prompt: "You are a senior problem solver. Break down difficult questions or algorithms into structured step-by-step explanations before giving the final answer.".into(),
+            slash_command: "solve".into(),
+            icon: "brain".into(),
+            enabled: true,
+        },
+        Skill {
+            id: "translator".into(),
+            name: "Translator".into(),
+            description: "Translate content fluently preserving tone and formatting.".into(),
+            system_prompt: "You are a professional multilingual translator. Translate the text accurately while preserving nuance, cultural context, and markdown formatting.".into(),
+            slash_command: "translate".into(),
+            icon: "languages".into(),
+            enabled: true,
+        },
+    ]
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Settings {
     #[serde(default)]
@@ -50,6 +118,10 @@ pub struct Settings {
     pub font_size: u32,
     #[serde(default)]
     pub system_prompt: Option<String>,
+    #[serde(default)]
+    pub mcp_servers: Vec<McpServerConfig>,
+    #[serde(default = "default_skills")]
+    pub skills: Vec<Skill>,
 }
 
 fn default_theme() -> ThemePreference {
@@ -100,6 +172,8 @@ impl Default for Settings {
             theme: ThemePreference::System,
             font_size: 14,
             system_prompt: None,
+            mcp_servers: Vec::new(),
+            skills: default_skills(),
         }
     }
 }

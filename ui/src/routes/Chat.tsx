@@ -11,7 +11,7 @@ interface ChatProps {
 }
 
 export function Chat({ onOpenSettings }: ChatProps) {
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(true)
   const activeConversationId = useChatStore((s) => s.activeConversationId)
 
   useEffect(() => {

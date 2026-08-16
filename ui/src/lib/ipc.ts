@@ -63,6 +63,14 @@ export const ipc = {
 
   testProvider: (providerId: string) => invoke<ProviderTestResult>('test_provider', { providerId }),
 
+  testMcpServer: (command: string, args: string[], env: Record<string, string>) =>
+    invoke<import('./types').McpTool[]>('test_mcp_server', { command, args, env }),
+
+  listMcpTools: () => invoke<import('./types').McpTool[]>('list_mcp_tools'),
+
+  callMcpTool: (serverId: string, toolName: string, args: Record<string, unknown>) =>
+    invoke<string>('call_mcp_tool', { serverId, toolName, arguments: args }),
+
   openConfigDir: () => invoke<void>('open_config_dir'),
 }
 

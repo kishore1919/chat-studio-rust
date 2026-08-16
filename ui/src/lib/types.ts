@@ -1,4 +1,4 @@
-// Mirrors the Rust types in src-tauri/src/{config,db,providers/mod}.rs.
+// Mirrors the Rust types in src-tauri/src/{config,db,providers/mod,mcp}.rs.
 // Keep field names/casing in sync - commands.rs serializes with serde's
 // default camelCase-free (snake_case) representation, matched here verbatim.
 
@@ -15,6 +15,33 @@ export interface ProviderConfig {
   models: string[]
 }
 
+export interface McpServerConfig {
+  id: string
+  name: string
+  command: string
+  args: string[]
+  env: Record<string, string>
+  enabled: boolean
+}
+
+export interface McpTool {
+  name: string
+  description?: string | null
+  inputSchema: Record<string, unknown>
+  server_id: string
+  server_name: string
+}
+
+export interface Skill {
+  id: string
+  name: string
+  description: string
+  system_prompt: string
+  slash_command: string
+  icon: string
+  enabled: boolean
+}
+
 export type ThemePreference = 'light' | 'dark' | 'system'
 
 export interface Settings {
@@ -24,6 +51,8 @@ export interface Settings {
   theme: ThemePreference
   font_size: number
   system_prompt: string | null
+  mcp_servers: McpServerConfig[]
+  skills: Skill[]
 }
 
 export interface Conversation {

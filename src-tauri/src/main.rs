@@ -4,6 +4,7 @@
 mod commands;
 mod config;
 mod db;
+mod mcp;
 mod providers;
 mod state;
 
@@ -48,6 +49,9 @@ fn main() {
             commands::add_provider,
             commands::remove_provider,
             commands::test_provider,
+            commands::test_mcp_server,
+            commands::list_mcp_tools,
+            commands::call_mcp_tool,
             commands::open_config_dir,
         ])
         .run(tauri::generate_context!())

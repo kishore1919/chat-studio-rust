@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { ArrowUpIcon, LightbulbIcon, SquareIcon } from 'lucide-react'
 import { useChatStore } from '../store/chat'
+import { useSettingsStore } from '../store/settings'
+import type { Skill } from '../lib/types'
 import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
 import {
@@ -32,12 +34,24 @@ export function Composer() {
   const clearConversation = useChatStore((s) => s.clearConversation)
   const isStreaming = useChatStore((s) => s.streaming !== null)
   const activeConversationId = useChatStore((s) => s.activeConversationId)
+  const settings = useSettingsStore((s) => s.settings)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   const isCommandTriggered = text.startsWith('/')
   const commandQuery = isCommandTriggered ? text.slice(1).toLowerCase() : ''
 
+  const skills = settings?.skills?.filter((s: Skill) => s.enabled) ?? []
+  const skillCommands: CommandOption[] = skills.map((skill: Skill) => ({
+    key: skill.slash_command || skill.id,
+    label: `/${skill.slash_command || skill.id}`,
+    description: `${skill.name} - ${skill.description}`,
+    action: ({ setText }: { setText: (v: string) => void }) => {
+      setText(`[${skill.name}]: `)
+    },
+  }))
+
   const commands: CommandOption[] = [
+    ...skillCommands,
     {
       key: 'clear',
       label: '/clear',
@@ -69,7 +83,7 @@ export function Composer() {
   ]
 
   const filteredCommands = isCommandTriggered
-    ? commands.filter((c) => c.key.includes(commandQuery))
+    ? commands.filter((c) => c.key.toLowerCase().includes(commandQuery.toLowerCase()))
     : []
 
   const showCommandMenu = isCommandTriggered && filteredCommands.length > 0
