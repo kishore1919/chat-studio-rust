@@ -5,6 +5,7 @@ import {
   CheckIcon,
   CodeIcon,
   EraserIcon,
+  GitBranchIcon,
   MenuIcon,
   PencilIcon,
   SearchIcon,
@@ -13,6 +14,7 @@ import {
 } from 'lucide-react'
 import { useChatStore } from '../store/chat'
 import { useSettingsStore } from '../store/settings'
+import { cn } from '../lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -36,6 +38,8 @@ import {
 interface ChatHeaderProps {
   onToggleSidebar: () => void
   onOpenSettings: () => void
+  mindMapOpen?: boolean
+  onToggleMindMap?: () => void
 }
 
 const CUSTOM_MODEL_VALUE = '__custom__'
@@ -56,7 +60,12 @@ function getAgentIcon(icon: string) {
   }
 }
 
-export function ChatHeader({ onToggleSidebar, onOpenSettings }: ChatHeaderProps) {
+export function ChatHeader({
+  onToggleSidebar,
+  onOpenSettings,
+  mindMapOpen,
+  onToggleMindMap,
+}: ChatHeaderProps) {
   const activeConversationId = useChatStore((s) => s.activeConversationId)
   const conversations = useChatStore((s) => s.conversations)
   const setConversationModel = useChatStore((s) => s.setConversationModel)
@@ -311,6 +320,22 @@ export function ChatHeader({ onToggleSidebar, onOpenSettings }: ChatHeaderProps)
       </div>
 
       <div className="flex items-center gap-1">
+        {active && onToggleMindMap && (
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            onClick={onToggleMindMap}
+            className={cn(
+              'size-8 transition-colors',
+              mindMapOpen
+                ? 'bg-accent text-primary'
+                : 'text-muted-foreground hover:text-foreground',
+            )}
+            title="Toggle Mind Map (Input Flow)"
+          >
+            <GitBranchIcon className="size-4" />
+          </Button>
+        )}
         {active && (
           <Button
             variant="ghost"

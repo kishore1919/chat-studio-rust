@@ -8,6 +8,7 @@ import type { Message } from '../lib/types'
 
 interface MessageListProps {
   conversationId: number
+  targetMessageId?: number | null
 }
 
 // Stable reference so the zustand selector below never reports a "changed"
@@ -20,7 +21,7 @@ const EMPTY_MESSAGES: Message[] = []
  * `followOutput` to stick to bottom while streaming and a top-reached
  * callback that lazily loads older pages - this is what keeps memory flat
  * as a conversation grows into the hundreds of messages. */
-export function MessageList({ conversationId }: MessageListProps) {
+export function MessageList({ conversationId, targetMessageId }: MessageListProps) {
   const messages = useChatStore((s) => s.messagesByConversation[conversationId] ?? EMPTY_MESSAGES)
   const hasMore = useChatStore((s) => s.hasMoreByConversation[conversationId] ?? false)
   const loadOlderMessages = useChatStore((s) => s.loadOlderMessages)
@@ -34,6 +35,19 @@ export function MessageList({ conversationId }: MessageListProps) {
     virtuosoRef.current?.scrollToIndex({ index: messages.length - 1, align: 'end' })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conversationId])
+
+  useEffect(() => {
+    if (targetMessageId !== undefined && targetMessageId !== null) {
+      const targetIndex = messages.findIndex((m) => m.id === targetMessageId)
+      if (targetIndex !== -1) {
+        virtuosoRef.current?.scrollToIndex({
+          index: targetIndex,
+          align: 'center',
+          behavior: 'smooth',
+        })
+      }
+    }
+  }, [targetMessageId, messages])
 
   if (messages.length === 0 && !isStreamingHere) {
     return <EmptyChatState />
