@@ -33,13 +33,12 @@ export function ConversationTimeline({
     return list
   }, [messages])
 
-  // Only show if there is at least 1 turn
   if (turns.length === 0) return null
 
   return (
-    <div className="group/timeline pointer-events-none absolute right-0 top-0 bottom-0 z-30 flex w-10 items-center justify-end pr-1.5 select-none">
-      {/* Subtle background track that fades in on hover */}
-      <div className="pointer-events-auto flex flex-col items-end gap-2.5 py-4 px-1 opacity-15 transition-opacity duration-300 group-hover/timeline:opacity-100">
+    <div className="group/timeline pointer-events-none absolute right-0 top-0 bottom-0 z-30 flex w-12 items-center justify-end pr-2 select-none">
+      {/* Vertical line indicator track (minimalist as in screenshot) */}
+      <div className="pointer-events-auto flex flex-col items-end gap-3 py-6 px-1 opacity-40 transition-opacity duration-200 group-hover/timeline:opacity-100">
         {turns.map((turn, index) => {
           const isHovered = hoveredIndex === index
           const isCurrent =
@@ -47,15 +46,15 @@ export function ConversationTimeline({
             activeMessageId === turn.assistantMessage?.id ||
             (activeMessageId == null && index === turns.length - 1)
 
-          // Clean text previews
-          const userPreview = turn.userMessage.content.trim().split('\n')[0] || 'User prompt'
+          // Clean text previews matching exact screenshot
+          const userPreview = turn.userMessage.content.trim().split('\n')[0] || 'Prompt'
           const assistantRaw = turn.assistantMessage?.content?.trim() || ''
           const assistantClean = assistantRaw
             .replace(/<think>[\s\S]*?<\/think>/gi, '')
             .replace(/%%TOOL_CALL_\d+%%/g, '')
             .trim()
           const assistantPreview =
-            assistantClean.split('\n')[0] || (turn.assistantMessage ? 'Assistant reply' : '')
+            assistantClean.split('\n')[0] || (turn.assistantMessage ? '...' : '')
 
           return (
             <div
@@ -64,17 +63,17 @@ export function ConversationTimeline({
               onMouseEnter={() => setHoveredIndex(index)}
               onMouseLeave={() => setHoveredIndex(null)}
             >
-              {/* Floating Preview Card on Hover */}
+              {/* Floating Preview Card matching the screenshot */}
               {isHovered && (
                 <div
                   onClick={() => onScrollToMessage(turn.userMessage.id)}
-                  className="absolute right-6 top-1/2 -translate-y-1/2 z-50 w-64 rounded-xl border border-border/80 bg-popover/95 p-3 text-left shadow-xl backdrop-blur-md transition-all animate-in fade-in zoom-in-95 cursor-pointer pointer-events-auto"
+                  className="absolute right-6 top-1/2 -translate-y-1/2 z-50 w-64 rounded-xl border border-border/80 bg-[#1e1f26]/95 text-left p-3 shadow-2xl backdrop-blur-md transition-all animate-in fade-in zoom-in-95 cursor-pointer pointer-events-auto"
                 >
-                  <div className="font-semibold text-xs text-foreground line-clamp-2 leading-snug">
+                  <div className="font-semibold text-[13px] text-white line-clamp-2 leading-snug">
                     {userPreview}
                   </div>
                   {assistantPreview && (
-                    <div className="mt-1 text-[11px] text-muted-foreground line-clamp-3 leading-relaxed">
+                    <div className="mt-1 text-[12px] text-neutral-400 line-clamp-3 leading-relaxed">
                       {assistantPreview}
                     </div>
                   )}
@@ -85,14 +84,12 @@ export function ConversationTimeline({
               <button
                 type="button"
                 onClick={() => onScrollToMessage(turn.userMessage.id)}
-                className={`block rounded-full transition-all duration-200 cursor-pointer ${
-                  isHovered
-                    ? 'h-[2px] w-6 bg-foreground shadow-xs'
-                    : isCurrent
-                      ? 'h-[2px] w-4.5 bg-foreground/90'
-                      : 'h-[1.5px] w-2.5 bg-muted-foreground/50 hover:w-5 hover:bg-foreground'
+                className={`block rounded-full transition-all duration-150 cursor-pointer ${
+                  isHovered || isCurrent
+                    ? 'h-[2px] w-6 bg-white shadow-xs'
+                    : 'h-[1.5px] w-3 bg-neutral-600 hover:w-5 hover:bg-neutral-300'
                 }`}
-                title={`Turn #${index + 1}: ${userPreview}`}
+                title={userPreview}
               />
             </div>
           )
