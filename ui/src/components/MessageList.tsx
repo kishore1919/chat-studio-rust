@@ -4,6 +4,7 @@ import { useChatStore } from '../store/chat'
 import { MessageBubble } from './MessageBubble'
 import { StreamingBubble } from './StreamingBubble'
 import { EmptyChatState } from './EmptyChatState'
+import { ConversationTimeline } from './ConversationTimeline'
 import type { Message } from '../lib/types'
 
 interface MessageListProps {
@@ -49,23 +50,40 @@ export function MessageList({ conversationId, targetMessageId }: MessageListProp
     }
   }, [targetMessageId, messages])
 
+  const handleScrollToMessage = (messageId: number) => {
+    const targetIndex = messages.findIndex((m) => m.id === messageId)
+    if (targetIndex !== -1) {
+      virtuosoRef.current?.scrollToIndex({
+        index: targetIndex,
+        align: 'center',
+        behavior: 'smooth',
+      })
+    }
+  }
+
   if (messages.length === 0 && !isStreamingHere) {
     return <EmptyChatState />
   }
 
   return (
-    <Virtuoso
-      ref={virtuosoRef}
-      className="flex-1"
-      data={messages}
-      followOutput={isStreamingHere ? 'smooth' : false}
-      startReached={() => {
-        if (hasMore) loadOlderMessages(conversationId)
-      }}
-      itemContent={(_index, message) => <MessageBubble message={message} />}
-      components={{
-        Footer: () => (isStreamingHere ? <StreamingBubble /> : null),
-      }}
-    />
+    <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
+      <Virtuoso
+        ref={virtuosoRef}
+        className="flex-1"
+        data={messages}
+        followOutput={isStreamingHere ? 'smooth' : false}
+        startReached={() => {
+          if (hasMore) loadOlderMessages(conversationId)
+        }}
+        itemContent={(_index, message) => <MessageBubble message={message} />}
+        components={{
+          Footer: () => (isStreamingHere ? <StreamingBubble /> : null),
+        }}
+      />
+      <ConversationTimeline
+        messages={messages}
+        onScrollToMessage={handleScrollToMessage}
+      />
+    </div>
   )
 }
