@@ -34,7 +34,7 @@ interface SettingsProps {
   onBack: () => void
 }
 
-type NavSection = 'model-provider' | 'default-model' | 'agents' | 'skills' | 'mcp' | 'appearance' | 'data'
+type NavSection = 'model-provider' | 'default-model' | 'agents' | 'skills' | 'mcp' | 'appearance'
 
 const NAV_GROUPS: { label: string; items: { id: NavSection; label: string }[] }[] = [
   {
@@ -56,7 +56,6 @@ const NAV_GROUPS: { label: string; items: { id: NavSection; label: string }[] }[
     label: 'Preferences',
     items: [
       { id: 'appearance', label: 'Appearance' },
-      { id: 'data', label: 'Data' },
     ],
   },
 ]
@@ -107,7 +106,6 @@ export function Settings({ onBack }: SettingsProps) {
           {section === 'skills' && <SkillsPane />}
           {section === 'mcp' && <McpPane />}
           {section === 'appearance' && <AppearancePane />}
-          {section === 'data' && <DataPane />}
         </div>
       </div>
     </div>
@@ -588,20 +586,6 @@ function AppearancePane() {
           className="w-full accent-primary"
         />
       </div>
-    </div>
-  )
-}
-
-function DataPane() {
-  return (
-    <div className="max-w-md space-y-3">
-      <h2 className="text-base font-semibold text-foreground">Data</h2>
-      <p className="text-xs leading-relaxed text-muted-foreground">
-        API keys and chat histories are stored locally on your machine.
-      </p>
-      <Button variant="outline" size="sm" className="text-xs" onClick={() => ipc.openConfigDir()}>
-        Open config folder
-      </Button>
     </div>
   )
 }
