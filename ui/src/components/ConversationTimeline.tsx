@@ -35,7 +35,7 @@ export function ConversationTimeline({
   if (turns.length === 0) return null
 
   return (
-    <div className="absolute right-1 top-1/2 -translate-y-1/2 z-30 flex flex-col items-end gap-1 p-1 select-none pointer-events-auto max-h-[80vh] overflow-y-auto">
+    <div className="absolute right-3.5 top-1/2 -translate-y-1/2 z-40 flex flex-col items-end gap-1.5 select-none pointer-events-auto">
       {turns.map((turn, index) => {
         const isHovered = hoveredIndex === index
 
@@ -64,23 +64,23 @@ export function ConversationTimeline({
                   e.stopPropagation()
                   onScrollToMessage(turn.userMessage.id)
                 }}
-                className="absolute right-8 top-1/2 -translate-y-1/2 z-50 w-64 rounded-xl border border-border bg-popover/98 p-3 text-left shadow-2xl backdrop-blur-md transition-all animate-in fade-in zoom-in-95 cursor-pointer"
+                className="absolute right-8 top-1/2 -translate-y-1/2 z-50 w-64 rounded-xl border border-border/90 bg-[#1b1c24]/98 p-3 text-left shadow-2xl backdrop-blur-xl transition-all animate-in fade-in zoom-in-95 cursor-pointer pointer-events-auto"
               >
-                <div className="font-semibold text-[12.5px] text-foreground line-clamp-2 leading-snug">
+                <div className="font-semibold text-[12.5px] text-white line-clamp-2 leading-snug">
                   {userPreview}
                 </div>
                 {assistantPreview && (
-                  <div className="mt-1 text-[11.5px] text-muted-foreground line-clamp-3 leading-relaxed">
+                  <div className="mt-1 text-[11.5px] text-neutral-400 line-clamp-3 leading-relaxed">
                     {assistantPreview}
                   </div>
                 )}
-                <div className="mt-1.5 text-right font-mono text-[9.5px] text-primary font-medium">
+                <div className="mt-1.5 text-right font-mono text-[9.5px] text-primary/90 font-medium">
                   Click to jump ↵
                 </div>
               </div>
             )}
 
-            {/* Clickable Dash: Highlights only when hovered */}
+            {/* Clickable Dash Button (no native title tooltip to prevent native overlap) */}
             <button
               type="button"
               onMouseDown={(e) => {
@@ -88,14 +88,13 @@ export function ConversationTimeline({
                 e.stopPropagation()
                 onScrollToMessage(turn.userMessage.id)
               }}
-              className="flex h-5 w-8 items-center justify-end pr-0.5 cursor-pointer group/btn"
-              title={`Turn #${index + 1}: ${userPreview}`}
+              className="flex h-5 w-7 items-center justify-end pr-0.5 cursor-pointer group/btn"
             >
               <span
                 className={`block rounded-full transition-all duration-150 ${
                   isHovered
-                    ? 'h-[2.5px] w-6 bg-foreground shadow-sm'
-                    : 'h-[2px] w-3.5 bg-muted-foreground/40 group-hover/btn:w-5 group-hover/btn:bg-foreground'
+                    ? 'h-[2.5px] w-5 bg-white shadow-sm'
+                    : 'h-[1.5px] w-2.5 bg-neutral-500/70 group-hover/btn:w-4 group-hover/btn:bg-white'
                 }`}
               />
             </button>

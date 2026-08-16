@@ -164,7 +164,7 @@ function MessageBubbleImpl({ message }: MessageBubbleProps) {
 
   if (message.role === 'user') {
     return (
-      <div className="group flex justify-end px-4 py-2">
+      <div className="group flex justify-end pl-4 pr-10 py-2">
         <div className="max-w-[80%] min-w-0">
           {editing ? (
             editBox
