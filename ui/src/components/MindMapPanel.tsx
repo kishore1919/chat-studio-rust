@@ -14,7 +14,6 @@ import { useChatStore } from '../store/chat'
 import type { Message } from '../lib/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { MermaidBlock } from './MermaidBlock'
 
 interface MindMapPanelProps {
   onClose: () => void
@@ -40,7 +39,6 @@ export function MindMapPanel({ onClose, onSelectMessage }: MindMapPanelProps) {
   const messagesByConversation = useChatStore((s) => s.messagesByConversation)
 
   const [search, setSearch] = useState('')
-  const [viewMode, setViewMode] = useState<'visual' | 'mermaid'>('visual')
   const [zoom, setZoom] = useState(1)
   const [selectedNodeId, setSelectedNodeId] = useState<number | null>(null)
 
@@ -58,21 +56,6 @@ export function MindMapPanel({ onClose, onSelectMessage }: MindMapPanelProps) {
     const q = search.toLowerCase()
     return userMessages.filter((m) => m.content.toLowerCase().includes(q))
   }, [userMessages, search])
-
-  // Generate Mermaid Mindmap syntax
-  const mermaidSyntax = useMemo(() => {
-    const rootTitle = (activeConv?.title || 'Chat Conversation').replace(/["`()[\]]/g, ' ')
-    if (userMessages.length === 0) {
-      return `mindmap\n  root(("${rootTitle}"))\n    Empty("No inputs yet")`
-    }
-
-    const lines = [`mindmap`, `  root(("${rootTitle}"))`]
-    userMessages.forEach((msg, idx) => {
-      const summary = truncateText(msg.content, 30).replace(/["`()[\]]/g, ' ')
-      lines.push(`    node${idx + 1}["#${idx + 1}: ${summary}"]`)
-    })
-    return lines.join('\n')
-  }, [activeConv?.title, userMessages])
 
   const handleNodeClick = (message: Message) => {
     setSelectedNodeId(message.id)
@@ -97,42 +80,15 @@ export function MindMapPanel({ onClose, onSelectMessage }: MindMapPanelProps) {
           </span>
         </div>
 
-        <div className="flex items-center gap-1">
-          <div className="flex rounded-md border border-border/70 p-0.5 bg-muted/30">
-            <button
-              type="button"
-              onClick={() => setViewMode('visual')}
-              className={`rounded px-1.5 py-0.5 text-[10px] font-medium transition-colors cursor-pointer ${
-                viewMode === 'visual'
-                  ? 'bg-background shadow-xs text-foreground'
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              Tree
-            </button>
-            <button
-              type="button"
-              onClick={() => setViewMode('mermaid')}
-              className={`rounded px-1.5 py-0.5 text-[10px] font-medium transition-colors cursor-pointer ${
-                viewMode === 'mermaid'
-                  ? 'bg-background shadow-xs text-foreground'
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              Mermaid
-            </button>
-          </div>
-
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            onClick={onClose}
-            className="size-7 text-muted-foreground hover:text-foreground"
-            title="Close Mind Map"
-          >
-            <XIcon className="size-3.5" />
-          </Button>
-        </div>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          onClick={onClose}
+          className="size-7 text-muted-foreground hover:text-foreground"
+          title="Close Mind Map"
+        >
+          <XIcon className="size-3.5" />
+        </Button>
       </div>
 
       {/* Search & Zoom Controls */}
@@ -147,42 +103,40 @@ export function MindMapPanel({ onClose, onSelectMessage }: MindMapPanelProps) {
           />
         </div>
 
-        {viewMode === 'visual' && (
-          <div className="flex items-center gap-0.5">
+        <div className="flex items-center gap-0.5">
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            onClick={handleZoomOut}
+            className="size-6 text-muted-foreground hover:text-foreground"
+            title="Zoom out"
+          >
+            <ZoomOutIcon className="size-3" />
+          </Button>
+          <span className="w-7 text-center font-mono text-[10px] text-muted-foreground">
+            {Math.round(zoom * 100)}%
+          </span>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            onClick={handleZoomIn}
+            className="size-6 text-muted-foreground hover:text-foreground"
+            title="Zoom in"
+          >
+            <ZoomInIcon className="size-3" />
+          </Button>
+          {zoom !== 1 && (
             <Button
               variant="ghost"
               size="icon-sm"
-              onClick={handleZoomOut}
+              onClick={handleResetZoom}
               className="size-6 text-muted-foreground hover:text-foreground"
-              title="Zoom out"
+              title="Reset zoom"
             >
-              <ZoomOutIcon className="size-3" />
+              <RotateCcwIcon className="size-2.5" />
             </Button>
-            <span className="w-7 text-center font-mono text-[10px] text-muted-foreground">
-              {Math.round(zoom * 100)}%
-            </span>
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              onClick={handleZoomIn}
-              className="size-6 text-muted-foreground hover:text-foreground"
-              title="Zoom in"
-            >
-              <ZoomInIcon className="size-3" />
-            </Button>
-            {zoom !== 1 && (
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                onClick={handleResetZoom}
-                className="size-6 text-muted-foreground hover:text-foreground"
-                title="Reset zoom"
-              >
-                <RotateCcwIcon className="size-2.5" />
-              </Button>
-            )}
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       {/* Content Area */}
@@ -194,10 +148,6 @@ export function MindMapPanel({ onClose, onSelectMessage }: MindMapPanelProps) {
             <p className="text-[11px] text-muted-foreground/70">
               Send messages in chat to view mind map connections
             </p>
-          </div>
-        ) : viewMode === 'mermaid' ? (
-          <div className="py-2">
-            <MermaidBlock chart={mermaidSyntax} />
           </div>
         ) : (
           <div
