@@ -36,9 +36,9 @@ export function ConversationTimeline({
   if (turns.length === 0) return null
 
   return (
-    <div className="group/timeline absolute right-0 top-0 bottom-0 z-30 flex w-10 items-center justify-end select-none pointer-events-auto">
-      {/* Small, ultra-subtle vertical dash rail with generous hover detection */}
-      <div className="flex flex-col items-end gap-1 py-4 pr-1.5 opacity-30 transition-opacity duration-200 group-hover/timeline:opacity-100">
+    <div className="group/timeline absolute right-0 top-0 bottom-0 z-30 flex w-12 items-center justify-end select-none pointer-events-auto">
+      {/* Clean, visible vertical dash rail */}
+      <div className="flex flex-col items-end gap-2.5 py-6 pr-2 opacity-65 transition-opacity duration-200 group-hover/timeline:opacity-100">
         {turns.map((turn, index) => {
           const isHovered = hoveredIndex === index
           const isCurrent =
@@ -63,7 +63,7 @@ export function ConversationTimeline({
               onMouseEnter={() => setHoveredIndex(index)}
               onMouseLeave={() => setHoveredIndex(null)}
             >
-              {/* Compact, sleek hover card with click navigation */}
+              {/* Floating Preview Card */}
               {isHovered && (
                 <div
                   onMouseDown={(e) => {
@@ -71,23 +71,23 @@ export function ConversationTimeline({
                     e.stopPropagation()
                     onScrollToMessage(turn.userMessage.id)
                   }}
-                  className="absolute right-7 top-1/2 -translate-y-1/2 z-50 w-60 rounded-xl border border-border/80 bg-popover/95 p-2.5 text-left shadow-xl backdrop-blur-md transition-all animate-in fade-in zoom-in-95 cursor-pointer"
+                  className="absolute right-8 top-1/2 -translate-y-1/2 z-50 w-64 rounded-xl border border-border bg-popover/98 p-3 text-left shadow-2xl backdrop-blur-md transition-all animate-in fade-in zoom-in-95 cursor-pointer"
                 >
-                  <div className="font-semibold text-[12px] text-foreground line-clamp-2 leading-snug">
+                  <div className="font-semibold text-[12.5px] text-foreground line-clamp-2 leading-snug">
                     {userPreview}
                   </div>
                   {assistantPreview && (
-                    <div className="mt-1 text-[11px] text-muted-foreground line-clamp-2 leading-relaxed">
+                    <div className="mt-1 text-[11.5px] text-muted-foreground line-clamp-3 leading-relaxed">
                       {assistantPreview}
                     </div>
                   )}
-                  <div className="mt-1.5 text-right font-mono text-[9px] text-primary/80 font-medium">
+                  <div className="mt-1.5 text-right font-mono text-[9.5px] text-primary font-medium">
                     Click to jump ↵
                   </div>
                 </div>
               )}
 
-              {/* Generous clickable hitbox containing the minimal dash line */}
+              {/* Generous clickable button containing the bright dash line */}
               <button
                 type="button"
                 onMouseDown={(e) => {
@@ -95,16 +95,14 @@ export function ConversationTimeline({
                   e.stopPropagation()
                   onScrollToMessage(turn.userMessage.id)
                 }}
-                className="flex h-5 w-8 items-center justify-end pr-0.5 cursor-pointer group/btn"
+                className="flex h-6 w-9 items-center justify-end pr-0.5 cursor-pointer group/btn"
                 title={`Turn #${index + 1}: ${userPreview}`}
               >
                 <span
                   className={`block rounded-full transition-all duration-150 ${
-                    isHovered
-                      ? 'h-[2px] w-5 bg-foreground'
-                      : isCurrent
-                        ? 'h-[2px] w-3.5 bg-foreground/90'
-                        : 'h-[1.5px] w-2 bg-muted-foreground/40 group-hover/btn:w-4 group-hover/btn:bg-foreground'
+                    isHovered || isCurrent
+                      ? 'h-[2.5px] w-6 bg-foreground shadow-sm'
+                      : 'h-[2px] w-3.5 bg-foreground/60 group-hover/btn:w-5 group-hover/btn:bg-foreground'
                   }`}
                 />
               </button>
