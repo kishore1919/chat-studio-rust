@@ -108,7 +108,7 @@ export function Settings({ onBack }: SettingsProps) {
         <nav className="w-48 shrink-0 overflow-y-auto border-r border-border px-2 py-3">
           {NAV_GROUPS.map((group) => (
             <div key={group.label} className="mb-3">
-              <div className="px-2 pb-1 text-[11px] font-medium tracking-wider text-muted-foreground uppercase">
+              <div className="px-2 pb-1 text-[11px] font-medium tracking-wider text-white uppercase">
                 {group.label}
               </div>
               {group.items.map((item) => (
@@ -120,8 +120,8 @@ export function Settings({ onBack }: SettingsProps) {
                   className={cn(
                     'block w-full cursor-pointer rounded-lg border px-2 py-1.5 text-left text-[13px] transition-colors',
                     section === item.id
-                      ? 'border-border/40 bg-accent font-medium text-foreground shadow-xs'
-                      : 'border-transparent text-muted-foreground hover:bg-accent/60 hover:text-foreground',
+                      ? 'border-white/15 bg-white/10 font-medium text-white shadow-xs'
+                      : 'border-transparent text-white hover:bg-white/10 hover:text-white',
                   )}
                 >
                   {item.label}
