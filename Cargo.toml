@@ -6,5 +6,31 @@ members = ["src-tauri"]
 opt-level = "z"
 lto = true
 codegen-units = 1
-panic = "abort"
-strip = true
+# "unwind", not "abort": under abort a panic in the spawned stream task killed
+# the whole process, and the JoinError branch in commands.rs that handles it was
+# unreachable dead code. Unwinding also lets Drop impls run during teardown.
+panic = "unwind"
+# "debuginfo", not true: a full strip removes the symbol table, which would make
+# the panic-hook backtraces print bare addresses instead of function names.
+strip = "debuginfo"
+
+# opt-level = "z" is right for the bulk of a Tauri binary, but these three are
+# the actual hot paths every turn goes through - sqlite queries and JSON
+# (de)serialization - where optimizing for size costs real throughput.
+[profile.release.package.libsqlite3-sys]
+opt-level = 3
+
+[profile.release.package.rusqlite]
+opt-level = 3
+
+[profile.release.package.serde_json]
+opt-level = 3
+
+[profile.dev]
+# Line tables only - full debuginfo dominates link time on Windows.
+debug = 1
+
+[profile.dev.package."*"]
+# Dependencies are compiled once and then only executed, so optimizing them
+# speeds up every dev run at no incremental cost.
+opt-level = 2

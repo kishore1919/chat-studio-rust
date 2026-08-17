@@ -10,23 +10,57 @@ pub struct ThemeMeta {
     pub builtin: bool,
 }
 
+/// Unbounded reads/writes of theme files straight into an IPC string were the
+/// only place this module didn't bound its input - a multi-hundred-MB file
+/// dropped in the themes directory (or pasted as import content) would have
+/// been read whole before anything could reject it.
+const MAX_THEME_FILE_BYTES: u64 = 2 * 1024 * 1024;
+const LIGHT_LUMA_THRESHOLD: f32 = 160.0;
+
 fn themes_dir() -> PathBuf {
     crate::config::config_dir().join("themes")
 }
 
+/// Collapses to alphanumerics and single dashes. Still leaves real
+/// collisions possible (`my_theme`/`my-theme`/`my.theme` all sanitize to the
+/// same id) - that's handled by `theme_path`'s callers checking existence,
+/// not by trying to make sanitization injective.
 fn sanitize_id(name: &str) -> String {
-    let id = name
-        .to_lowercase()
-        .chars()
-        .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
-        .collect::<String>();
+    let mut id = String::with_capacity(name.len());
+    let mut last_was_dash = false;
+    for c in name.to_lowercase().chars() {
+        if c.is_ascii_alphanumeric() {
+            id.push(c);
+            last_was_dash = false;
+        } else if !last_was_dash {
+            id.push('-');
+            last_was_dash = true;
+        }
+    }
     let id = id.trim_matches('-').to_string();
-    if id.is_empty() { "custom-theme".into() } else { id }
+    if id.is_empty() {
+        "custom-theme".into()
+    } else {
+        id
+    }
 }
 
-pub fn ensure_themes_dir() -> anyhow::Result<()> {
-    std::fs::create_dir_all(themes_dir())?;
-    Ok(())
+/// Resolves a theme id to its file path. `sanitize_id` can only ever produce
+/// ASCII alphanumerics and single dashes, so a path escaping `themes_dir()`
+/// should be unreachable - this assertion is a hard stop against that
+/// invariant silently breaking later, rather than resting solely on
+/// sanitization.
+fn theme_path(theme_id: &str) -> Result<PathBuf, String> {
+    let dir = themes_dir();
+    let path = dir.join(format!("{}.json", sanitize_id(theme_id)));
+    if path.parent() != Some(dir.as_path()) {
+        return Err("invalid theme id".into());
+    }
+    Ok(path)
+}
+
+pub fn ensure_themes_dir() -> std::io::Result<()> {
+    std::fs::create_dir_all(themes_dir())
 }
 
 #[tauri::command]
@@ -78,12 +112,27 @@ pub fn list_themes() -> Result<Vec<ThemeMeta>, String> {
 
 #[tauri::command]
 pub fn get_theme_content(theme_id: String) -> Result<String, String> {
-    let path = themes_dir().join(format!("{}.json", sanitize_id(&theme_id)));
+    let path = theme_path(&theme_id)?;
+    let meta = std::fs::metadata(&path).map_err(|e| e.to_string())?;
+    if meta.len() > MAX_THEME_FILE_BYTES {
+        return Err(format!(
+            "theme file exceeds {MAX_THEME_FILE_BYTES} byte limit"
+        ));
+    }
     std::fs::read_to_string(&path).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub fn import_theme_content(theme_id: String, content: String) -> Result<ThemeMeta, String> {
+pub fn import_theme_content(
+    theme_id: String,
+    content: String,
+    overwrite: bool,
+) -> Result<ThemeMeta, String> {
+    if content.len() as u64 > MAX_THEME_FILE_BYTES {
+        return Err(format!(
+            "theme content exceeds {MAX_THEME_FILE_BYTES} byte limit"
+        ));
+    }
     let v: serde_json::Value = serde_json::from_str(&content).map_err(|e| e.to_string())?;
     let name = v
         .get("name")
@@ -103,15 +152,27 @@ pub fn import_theme_content(theme_id: String, content: String) -> Result<ThemeMe
                 .and_then(|c| c.get("editor.background"))
                 .and_then(|c| c.as_str())
                 .unwrap_or("");
-            if is_light_hex(bg) { "light".into() } else { "dark".into() }
+            if is_light_hex(bg).unwrap_or(false) {
+                "light".into()
+            } else {
+                "dark".into()
+            }
         });
     let id = if theme_id.trim().is_empty() {
         sanitize_id(&name)
     } else {
         sanitize_id(&theme_id)
     };
+    let path = theme_path(&id)?;
+    // `my_theme`/`my-theme`/`my.theme` all sanitize to the same id, so a
+    // second import can silently overwrite an unrelated theme unless the
+    // caller explicitly opts in.
+    if !overwrite && path.exists() {
+        return Err(format!(
+            "A theme named '{id}' already exists. Rename it or import with overwrite."
+        ));
+    }
     ensure_themes_dir().map_err(|e| e.to_string())?;
-    let path = themes_dir().join(format!("{}.json", id));
     std::fs::write(&path, &content).map_err(|e| e.to_string())?;
     Ok(ThemeMeta {
         id,
@@ -123,7 +184,7 @@ pub fn import_theme_content(theme_id: String, content: String) -> Result<ThemeMe
 
 #[tauri::command]
 pub fn delete_custom_theme(theme_id: String) -> Result<(), String> {
-    let path = themes_dir().join(format!("{}.json", sanitize_id(&theme_id)));
+    let path = theme_path(&theme_id)?;
     if !path.exists() {
         return Err("Theme not found".into());
     }
@@ -136,14 +197,84 @@ pub fn open_themes_dir() -> Result<(), String> {
     open::that(themes_dir()).map_err(|e| e.to_string())
 }
 
-fn is_light_hex(s: &str) -> bool {
+/// `None` on anything that isn't a recognizable hex color - previously this
+/// silently read as black (`unwrap_or(0)` per channel), which reported a
+/// malformed color as "dark" rather than surfacing that it couldn't be
+/// parsed. Callers still default to dark on `None`, matching the old
+/// behavior; the difference is now visible to anyone reading the call site.
+fn is_light_hex(s: &str) -> Option<bool> {
     let hex = s.trim_start_matches('#');
-    if hex.len() < 6 {
-        return false;
+    let channel = |slice: &str| u8::from_str_radix(slice, 16).ok();
+    let (r, g, b) = match hex.len() {
+        3 | 4 => (
+            channel(&hex[0..1].repeat(2))?,
+            channel(&hex[1..2].repeat(2))?,
+            channel(&hex[2..3].repeat(2))?,
+        ),
+        6 | 8 => (
+            channel(&hex[0..2])?,
+            channel(&hex[2..4])?,
+            channel(&hex[4..6])?,
+        ),
+        _ => return None,
+    };
+    let luma = 0.2126 * r as f32 + 0.7152 * g as f32 + 0.0722 * b as f32;
+    Some(luma > LIGHT_LUMA_THRESHOLD)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sanitize_id_collapses_dash_runs_and_trims() {
+        assert_eq!(sanitize_id("My  Cool!!Theme"), "my-cool-theme");
+        assert_eq!(
+            sanitize_id("--leading-and-trailing--"),
+            "leading-and-trailing"
+        );
     }
-    let r = u8::from_str_radix(&hex[0..2], 16).unwrap_or(0) as f32;
-    let g = u8::from_str_radix(&hex[2..4], 16).unwrap_or(0) as f32;
-    let b = u8::from_str_radix(&hex[4..6], 16).unwrap_or(0) as f32;
-    let luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-    luma > 160.0
+
+    #[test]
+    fn sanitize_id_falls_back_when_nothing_survives() {
+        assert_eq!(sanitize_id("!!!"), "custom-theme");
+        assert_eq!(sanitize_id(""), "custom-theme");
+    }
+
+    #[test]
+    fn sanitize_id_neutralizes_path_traversal() {
+        let id = sanitize_id("../../etc/passwd");
+        assert!(!id.contains(".."));
+        assert!(!id.contains('/'));
+    }
+
+    #[test]
+    fn theme_path_stays_inside_themes_dir() {
+        let path = theme_path("../../etc/passwd").unwrap();
+        assert_eq!(path.parent(), Some(themes_dir().as_path()));
+    }
+
+    #[test]
+    fn different_looking_names_collide_to_the_same_id() {
+        // Documents the collision `import_theme_content`'s existence check
+        // guards against - sanitization is lossy by design, not injective.
+        assert_eq!(sanitize_id("my_theme"), sanitize_id("my.theme"));
+        assert_eq!(sanitize_id("my_theme"), sanitize_id("my-theme"));
+    }
+
+    #[test]
+    fn is_light_hex_parses_all_recognized_forms() {
+        assert_eq!(is_light_hex("#ffffff"), Some(true));
+        assert_eq!(is_light_hex("#000000"), Some(false));
+        assert_eq!(is_light_hex("#fff"), Some(true));
+        assert_eq!(is_light_hex("#000"), Some(false));
+        assert_eq!(is_light_hex("#ffffffff"), Some(true));
+    }
+
+    #[test]
+    fn is_light_hex_rejects_malformed_input() {
+        assert_eq!(is_light_hex(""), None);
+        assert_eq!(is_light_hex("not-a-color"), None);
+        assert_eq!(is_light_hex("#ff"), None);
+    }
 }

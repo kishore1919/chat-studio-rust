@@ -11,8 +11,6 @@ use tokio_util::sync::CancellationToken;
 pub struct ChatMessage {
     pub role: String,
     pub content: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub reasoning: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -34,6 +32,17 @@ pub struct Usage {
     pub tokens_out: Option<i64>,
 }
 
+/// What a provider can put on the internal mpsc channel while streaming.
+/// Deliberately narrower than `StreamEvent`: providers never know the
+/// persisted row id, provider/model labels, or final duration - only
+/// `commands.rs` does, so `Done`/`Error` are constructed there exclusively.
+#[derive(Debug, Clone)]
+pub enum ProviderEvent {
+    Delta { text: String },
+    Reasoning { text: String },
+}
+
+/// What crosses IPC to the webview on the `stream://{stream_id}` channel.
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum StreamEvent {
@@ -44,12 +53,22 @@ pub enum StreamEvent {
         text: String,
     },
     Done {
+        /// `None` when nothing was persisted (an empty reply) - the frontend
+        /// drops its pending bubble instead of trying to reconcile an id.
+        message_id: Option<i64>,
+        provider: String,
+        model: String,
+        created_at: i64,
         tokens_in: Option<i64>,
         tokens_out: Option<i64>,
         duration_ms: i64,
     },
     Error {
         message: String,
+        /// Set when partial output was still persisted before the error, so
+        /// the frontend can reconcile the pending bubble rather than leave it
+        /// stuck at its sentinel id.
+        message_id: Option<i64>,
     },
 }
 
@@ -60,7 +79,6 @@ pub enum ProviderError {
     #[error("http {status}: {body}")]
     Http { status: u16, body: String },
     #[error("unexpected response shape: {0}")]
-    #[allow(dead_code)] // reserved for stricter response-shape validation later
     Shape(String),
     #[error("cancelled")]
     Cancelled,
@@ -75,15 +93,35 @@ pub trait Provider: Send + Sync {
     async fn stream_chat(
         &self,
         req: ChatRequest,
-        tx: mpsc::Sender<StreamEvent>,
+        tx: mpsc::Sender<ProviderEvent>,
         cancel: CancellationToken,
     ) -> ProviderResult<Usage>;
 }
 
-pub fn build_provider(cfg: &ProviderConfig) -> Box<dyn Provider> {
+pub fn build_provider(http: &reqwest::Client, cfg: &ProviderConfig) -> Box<dyn Provider> {
     match cfg.dialect {
-        Dialect::OpenaiCompat => Box::new(openai_compat::OpenAiCompatProvider::new(cfg)),
-        Dialect::Ollama => Box::new(ollama::OllamaProvider::new(cfg)),
+        Dialect::OpenaiCompat => Box::new(openai_compat::OpenAiCompatProvider::new(http, cfg)),
+        Dialect::Ollama => Box::new(ollama::OllamaProvider::new(http, cfg)),
+    }
+}
+
+/// Cap on how much of an HTTP error body we keep. Bodies are
+/// provider/proxy-controlled and unbounded - a misconfigured gateway's HTML
+/// error page can be megabytes - and shipping that whole and un-redacted into
+/// an emitted event and a log line is both wasteful and a leak risk.
+const MAX_ERROR_BODY: usize = 2048;
+
+/// Reads a capped, API-key-redacted snippet of an HTTP error response body.
+/// Some gateways echo the `Authorization` header back inside their error
+/// payload; redaction only kicks in once the key is at least 8 chars so a
+/// placeholder value doesn't get shredded into `[redacted]` everywhere.
+pub async fn read_error_body(resp: reqwest::Response, api_key: &str) -> String {
+    let body = resp.text().await.unwrap_or_default();
+    let truncated: String = body.chars().take(MAX_ERROR_BODY).collect();
+    if api_key.len() >= 8 {
+        truncated.replace(api_key, "[redacted]")
+    } else {
+        truncated
     }
 }
 
@@ -101,10 +139,7 @@ impl LineSplitter {
     pub fn push(&mut self, bytes: &[u8]) -> Vec<String> {
         self.buffer.extend_from_slice(bytes);
         let mut lines = Vec::new();
-        loop {
-            let Some(pos) = self.buffer.iter().position(|&b| b == b'\n') else {
-                break;
-            };
+        while let Some(pos) = self.buffer.iter().position(|&b| b == b'\n') {
             let line: Vec<u8> = self.buffer.drain(..=pos).collect();
             let line = &line[..line.len() - 1];
             let line = if line.ends_with(b"\r") {

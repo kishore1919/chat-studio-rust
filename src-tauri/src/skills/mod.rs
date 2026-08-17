@@ -11,7 +11,12 @@ pub fn discover_global_skills() -> Vec<Skill> {
         search_dirs.push(home.join(".agents").join("skills"));
         search_dirs.push(home.join(".claude").join("skills"));
         search_dirs.push(home.join(".codex").join("skills"));
-        search_dirs.push(home.join(".gemini").join("antigravity-cli").join("builtin").join("skills"));
+        search_dirs.push(
+            home.join(".gemini")
+                .join("antigravity-cli")
+                .join("builtin")
+                .join("skills"),
+        );
         search_dirs.push(home.join(".config").join("chat-studio").join("skills"));
     }
 
@@ -75,40 +80,28 @@ fn parse_skill_file(file_path: &Path, parent_dir: &Path) -> Option<Skill> {
     let mut icon = "sparkles".to_string();
 
     // Parse YAML frontmatter if present (--- ... ---)
-    if raw.starts_with("---") {
-        if let Some(end_idx) = raw[3..].find("---") {
-            let frontmatter = &raw[3..3 + end_idx];
-            let body = raw[3 + end_idx + 3..].trim();
+    if let Some(after_open) = raw.strip_prefix("---") {
+        if let Some(end_idx) = after_open.find("---") {
+            let frontmatter = &after_open[..end_idx];
+            let body = after_open[end_idx + 3..].trim();
             system_prompt = body.to_string();
 
             for line in frontmatter.lines() {
                 let trimmed = line.trim();
-                if let Some((k, v)) = trimmed.split_once(':') {
-                    let key = k.trim().to_lowercase();
-                    let val = v.trim().trim_matches('"').trim_matches('\'').to_string();
-                    match key.as_str() {
-                        "name" => {
-                            if !val.is_empty() {
-                                name = val;
-                            }
-                        }
-                        "description" => {
-                            if !val.is_empty() {
-                                description = val;
-                            }
-                        }
-                        "slash_command" | "command" => {
-                            if !val.is_empty() {
-                                slash_command = val.replace('/', "");
-                            }
-                        }
-                        "icon" => {
-                            if !val.is_empty() {
-                                icon = val;
-                            }
-                        }
-                        _ => {}
-                    }
+                let Some((k, v)) = trimmed.split_once(':') else {
+                    continue;
+                };
+                let key = k.trim().to_lowercase();
+                let val = v.trim().trim_matches('"').trim_matches('\'').to_string();
+                if val.is_empty() {
+                    continue;
+                }
+                match key.as_str() {
+                    "name" => name = val,
+                    "description" => description = val,
+                    "slash_command" | "command" => slash_command = val.replace('/', ""),
+                    "icon" => icon = val,
+                    _ => {}
                 }
             }
         }

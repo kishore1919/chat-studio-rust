@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { ipc } from '../lib/ipc'
+import { syncThemeFromSettings } from './theme'
 import type { ModelInfo, ProviderConfig, Settings } from '../lib/types'
 
 interface SettingsState {
@@ -8,6 +9,11 @@ interface SettingsState {
   loading: boolean
   load: () => Promise<void>
   save: (next: Settings) => Promise<void>
+  /** Updates local state only, with no IPC write - paired with a debounced
+   * persist call at the callsite so a rapid-fire control (a slider, a
+   * color-picker drag) stays visually responsive without saving on every
+   * tick. */
+  setLocalSettings: (next: Settings) => void
   addProvider: (provider: ProviderConfig) => Promise<void>
   removeProvider: (providerId: string) => Promise<void>
   refreshModels: (providerId: string, force?: boolean) => Promise<void>
@@ -23,14 +29,15 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     set({ loading: true })
     const settings = await ipc.getSettings()
     set({ settings, loading: false })
-    const { syncThemeFromSettings } = await import('./theme')
-    syncThemeFromSettings(settings.theme_id, settings.accent ?? null, settings.border_visibility || 'subtle')
+    syncThemeFromSettings(settings.theme_id, settings.accent ?? null, settings.border_visibility || 'subtle', settings.font_size)
   },
 
   save: async (next) => {
     await ipc.saveSettings(next)
     set({ settings: next })
   },
+
+  setLocalSettings: (next) => set({ settings: next }),
 
   addProvider: async (provider) => {
     await ipc.addProvider(provider)

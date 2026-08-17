@@ -13,6 +13,8 @@ export interface ProviderConfig {
   enabled: boolean
   extra_headers: Record<string, string>
   models: string[]
+  /** Escape hatch for endpoints that reject an unrecognized `stream_options` field. */
+  disable_stream_options: boolean
 }
 
 export interface McpServerConfig {
@@ -59,6 +61,15 @@ export interface AgentConfig {
 
 export type ThemePreference = 'light' | 'dark' | 'system'
 
+/** A saved message snippet, applied via `/prompt <name>` in the composer -
+ * distinct from a Skill/Agent's system_prompt: this is inserted as the draft
+ * message text for the user to review and send, not a persona change. */
+export interface PromptTemplate {
+  id: string
+  name: string
+  content: string
+}
+
 export interface Settings {
   providers: ProviderConfig[]
   default_provider: string | null
@@ -72,6 +83,9 @@ export interface Settings {
   mcp_servers: McpServerConfig[]
   skills: Skill[]
   agents: AgentConfig[]
+  prompts: PromptTemplate[]
+  /** Soft budget (in tokens) for how much history is sent per turn. */
+  context_tokens: number
 }
 
 export interface Conversation {
@@ -110,9 +124,45 @@ export interface ModelInfo {
 export type StreamEvent =
   | { type: 'delta'; text: string }
   | { type: 'reasoning'; text: string }
-  | { type: 'done'; tokens_in: number | null; tokens_out: number | null; duration_ms: number }
-  | { type: 'error'; message: string }
+  | {
+      type: 'done'
+      /** Null when nothing was persisted (an empty reply). */
+      message_id: number | null
+      provider: string
+      model: string
+      created_at: number
+      tokens_in: number | null
+      tokens_out: number | null
+      duration_ms: number
+    }
+  | {
+      type: 'error'
+      message: string
+      /** Set when partial output was still persisted before the error. */
+      message_id: number | null
+    }
+
+/** Returned by send_message/retry_message/edit_and_resend_message. */
+export interface StreamHandle {
+  stream_id: string
+  /** Rowid of the user turn just inserted; null for retry/edit-resend. */
+  user_message_id: number | null
+  /** Set when the auto-titler renamed a "New chat". */
+  title: string | null
+}
 
 export type ProviderTestResult =
   | { ok: true; models_found: number }
   | { ok: false; message: string }
+
+export interface Diagnostics {
+  app_version: string
+  log_dir: string
+  config_dir: string
+  db_path: string
+  schema_version: number
+  provider_count: number
+  /** Recovered startup failures - corrupt settings, unopenable history. Shown
+   * to the user once on mount so a degraded launch is never silent. */
+  startup_warnings: string[]
+}

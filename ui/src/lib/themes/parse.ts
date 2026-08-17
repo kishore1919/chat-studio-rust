@@ -11,7 +11,6 @@ const FALLBACK_LIGHT: Record<string, string> = {
   '--text': '#16171d',
   '--text-muted': '#6e6a78',
   '--accent': '#007acc',
-  '--code-bg': '#f4f3ec',
 }
 
 const FALLBACK_DARK: Record<string, string> = {
@@ -24,7 +23,6 @@ const FALLBACK_DARK: Record<string, string> = {
   '--text': '#cccccc',
   '--text-muted': '#858585',
   '--accent': '#007acc',
-  '--code-bg': '#1e1e1e',
 }
 
 function pick(c: Record<string, string> | undefined, ...keys: string[]): string | undefined {
@@ -57,8 +55,9 @@ export function workbenchToVars(raw: VsCodeThemeRaw): Record<string, string> {
     pick(c, 'editorHoverWidget.background', 'editorSuggestWidget.background') ||
     (type === 'light' ? '#e8f0fe' : '#264f78')
   vars['--bubble-user'] = bubbleUserBg
-  vars['--bubble-assistant'] = pick(c, 'editor.background', 'panel.background') || vars['--bg-elevated'] || fb['--code-bg']
-  vars['--code-bg'] = pick(c, 'editor.background') || vars['--bg-elevated'] || fb['--code-bg']
+  vars['--bubble-assistant'] = pick(c, 'editor.background', 'panel.background') || vars['--bg-elevated']
+  // --code-bg is deliberately absent here: code blocks are fixed to GitHub
+  // Dark colors everywhere (see index.css), independent of the active theme.
   vars['--danger'] = pick(c, 'errorForeground', 'inputValidation.errorBorder') || (type === 'light' ? '#dc2626' : '#f87171')
   vars['--success'] = pick(c, 'terminal.ansiGreen', 'charts.green', 'testing.iconPassed') || (type === 'light' ? '#16a34a' : '#4ade80')
 
@@ -87,47 +86,10 @@ export function workbenchToVars(raw: VsCodeThemeRaw): Record<string, string> {
   return vars
 }
 
-export function tokenColorsToCss(raw: VsCodeThemeRaw): string {
-  const tokens = raw.tokenColors || []
-  if (tokens.length === 0) return ''
-  let css = ''
-  for (const tc of tokens) {
-    const scopes = Array.isArray(tc.scope) ? tc.scope : tc.scope ? [tc.scope] : []
-    if (!tc.settings.foreground && !tc.settings.fontStyle) continue
-    for (const scope of scopes) {
-      const cls = scopeToHljsClass(scope)
-      if (!cls) continue
-      const rules: string[] = []
-      if (tc.settings.foreground) rules.push(`color: ${tc.settings.foreground} !important`)
-      if (tc.settings.fontStyle?.includes('italic')) rules.push('font-style: italic')
-      if (tc.settings.fontStyle?.includes('bold')) rules.push('font-weight: 700')
-      if (tc.settings.fontStyle?.includes('underline')) rules.push('text-decoration: underline')
-      if (rules.length) css += `.hljs ${cls} { ${rules.join('; ')} }\n`
-    }
-  }
-  return css
-}
-
-function scopeToHljsClass(scope: string): string | null {
-  const s = scope.toLowerCase()
-  if (s.includes('comment')) return '.hljs-comment'
-  if (s.includes('string')) return '.hljs-string'
-  if (s.includes('keyword') || s === 'storage.type' || s === 'storage.modifier') return '.hljs-keyword'
-  if (s.includes('entity.name.function') || s.includes('support.function')) return '.hljs-title.function_'
-  if (s.includes('entity.name.type') || s.includes('entity.name.class') || s.includes('support.class')) return '.hljs-title.class_'
-  if (s.includes('variable') && s.includes('parameter')) return '.hljs-params'
-  if (s.includes('variable')) return '.hljs-variable'
-  if (s.includes('constant.numeric') || s.includes('constant.character.numeric')) return '.hljs-number'
-  if (s.includes('constant.language') || s.includes('constant') && s.includes('boolean')) return '.hljs-literal'
-  if (s.includes('entity.name.tag') || s.includes('tag')) return '.hljs-tag'
-  if (s.includes('entity.other.attribute-name')) return '.hljs-attr'
-  if (s.includes('support.constant') || s.includes('constant.other')) return '.hljs-symbol'
-  if (s.includes('meta.preprocessor') || s.includes('keyword.control.import')) return '.hljs-meta'
-  return null
-}
-
 export function parseVsCodeTheme(raw: VsCodeThemeRaw, meta: ThemeMeta): AppTheme {
   const vars = workbenchToVars(raw)
-  const tokenCss = tokenColorsToCss(raw)
-  return { meta, raw, vars, tokenCss }
+  // Previously derived `.hljs-*` overrides from the theme's tokenColors -
+  // code blocks are now fixed to GitHub Dark everywhere (see index.css), so
+  // an imported theme no longer has anything to contribute here.
+  return { meta, raw, vars, tokenCss: '' }
 }

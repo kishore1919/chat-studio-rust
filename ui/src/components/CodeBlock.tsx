@@ -1,6 +1,7 @@
-import { useState, type ReactNode } from 'react'
+import { type ReactNode } from 'react'
 import { CheckIcon, CopyIcon } from 'lucide-react'
 import { cn } from '../lib/utils'
+import { useCopyFeedback } from '../lib/useCopyFeedback'
 
 interface CodeBlockProps {
   className?: string
@@ -23,37 +24,45 @@ function getNodeText(node: ReactNode): string {
 
 /** Fenced code block renderer used by MarkdownContent, with syntax highlighting and copy button. */
 export function CodeBlock({ className, children }: CodeBlockProps) {
-  const [copied, setCopied] = useState(false)
+  const [copied, copy] = useCopyFeedback()
 
   const languageMatch = className?.match(/language-([a-zA-Z0-9_+#.-]+)/)
   const language = languageMatch
     ? languageMatch[1]
     : className?.replace('hljs', '').trim() || 'code'
 
-  const handleCopy = async () => {
-    const text = getNodeText(children).replace(/\n$/, '')
-    await navigator.clipboard.writeText(text)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 1500)
-  }
+  const handleCopy = () => copy(getNodeText(children).replace(/\n$/, ''))
 
   return (
-    <div className="group relative my-3 overflow-hidden rounded-xl border border-border/40 bg-[var(--code-bg)] text-foreground shadow-xs">
-      <div className="flex items-center justify-between border-b border-border/30 bg-muted/40 px-3 py-1.5 text-xs text-muted-foreground select-none">
-        <span className="font-mono text-[11px] font-semibold lowercase text-primary/90">
+    // Fixed GitHub Dark colors, not the app's theme tokens - a code block
+    // should look the same and stay legible regardless of whether the app
+    // itself is in light or dark mode.
+    <div
+      className="group relative my-3 overflow-hidden rounded-xl border shadow-sm"
+      style={{ background: 'var(--code-bg)', borderColor: 'var(--code-border)', color: 'var(--code-fg)' }}
+    >
+      <div
+        className="flex items-center justify-between border-b px-3 py-1.5 text-xs select-none"
+        style={{ borderColor: 'var(--code-border)', background: 'var(--code-header-bg)' }}
+      >
+        <span
+          className="font-mono text-[11px] font-semibold lowercase"
+          style={{ color: 'var(--hljs-function)' }}
+        >
           {language}
         </span>
         <button
           type="button"
           onClick={handleCopy}
           aria-label={copied ? 'Copied' : 'Copy code'}
-          className="flex cursor-pointer items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          className="flex cursor-pointer items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-medium transition-colors hover:bg-white/10"
+          style={{ color: copied ? 'var(--hljs-tag)' : 'var(--code-muted)' }}
           title="Copy code"
         >
           {copied ? (
             <>
-              <CheckIcon className="size-3 text-success" />
-              <span className="text-success font-medium">Copied</span>
+              <CheckIcon className="size-3" />
+              <span className="font-medium">Copied</span>
             </>
           ) : (
             <>

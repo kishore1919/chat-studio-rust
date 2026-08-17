@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 import mermaid from 'mermaid'
 import {
   CheckIcon,
@@ -11,26 +11,42 @@ import {
 } from 'lucide-react'
 import { useThemeStore } from '../store/theme'
 import { Button } from '@/components/ui/button'
+import { useCopyFeedback } from '../lib/useCopyFeedback'
 
 interface MermaidBlockProps {
   chart: string
 }
 
-mermaid.initialize({
-  startOnLoad: false,
-  securityLevel: 'loose',
-  fontFamily: 'inherit',
-})
+/** `mermaid.initialize` mutates one global config, so calling it per diagram is
+ * pure waste - the only input that ever changes is light/dark. `securityLevel`
+ * is 'strict' rather than 'loose' because the chart source is model output and
+ * the rendered SVG goes through `dangerouslySetInnerHTML` below; 'loose' would
+ * enable HTML labels and click bindings on untrusted input. The cost is that
+ * markup inside a node label renders literally. */
+let initializedFor: 'light' | 'dark' | null = null
+
+function ensureMermaidInitialized(themeType: 'light' | 'dark') {
+  if (initializedFor === themeType) return
+  mermaid.initialize({
+    startOnLoad: false,
+    theme: themeType === 'light' ? 'default' : 'dark',
+    securityLevel: 'strict',
+    fontFamily: 'inherit',
+  })
+  initializedFor = themeType
+}
 
 export function MermaidBlock({ chart }: MermaidBlockProps) {
-  const containerRef = useRef<HTMLDivElement>(null)
+  // No Date.now() suffix: useId is already unique per instance and stable
+  // across re-renders, so mermaid reuses one scratch node instead of orphaning
+  // a fresh measurement subtree under <body> on every render.
   const uniqueId = useId().replace(/[:]/g, '_')
   const resolvedType = useThemeStore((s) => s.resolved?.meta.type ?? 'dark')
 
   const [svg, setSvg] = useState<string>('')
   const [error, setError] = useState<string | null>(null)
   const [showCode, setShowCode] = useState(false)
-  const [copied, setCopied] = useState(false)
+  const [copied, copy] = useCopyFeedback()
   const [zoom, setZoom] = useState(1)
 
   const cleanChart = chart.trim()
@@ -40,15 +56,9 @@ export function MermaidBlock({ chart }: MermaidBlockProps) {
 
     const renderChart = async () => {
       try {
-        mermaid.initialize({
-          startOnLoad: false,
-          theme: resolvedType === 'light' ? 'default' : 'dark',
-          securityLevel: 'loose',
-          fontFamily: 'inherit',
-        })
+        ensureMermaidInitialized(resolvedType === 'light' ? 'light' : 'dark')
 
-        const id = `mermaid_${uniqueId}_${Date.now()}`
-        const { svg: renderedSvg } = await mermaid.render(id, cleanChart)
+        const { svg: renderedSvg } = await mermaid.render(`mermaid_${uniqueId}`, cleanChart)
         if (active) {
           setSvg(renderedSvg)
           setError(null)
@@ -68,11 +78,7 @@ export function MermaidBlock({ chart }: MermaidBlockProps) {
     }
   }, [cleanChart, resolvedType, uniqueId])
 
-  const handleCopy = async () => {
-    await navigator.clipboard.writeText(cleanChart)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 1500)
-  }
+  const handleCopy = () => copy(cleanChart)
 
   const handleZoomIn = () => setZoom((z) => Math.min(z + 0.2, 2.5))
   const handleZoomOut = () => setZoom((z) => Math.max(z - 0.2, 0.5))
@@ -168,7 +174,7 @@ export function MermaidBlock({ chart }: MermaidBlockProps) {
 
       {/* Content Body */}
       {showCode ? (
-        <pre className="overflow-x-auto bg-[var(--code-bg)] p-3 text-[12px] font-mono leading-relaxed text-foreground">
+        <pre className="overflow-x-auto bg-[var(--code-bg)] p-3 text-[12px] font-mono leading-relaxed text-[var(--code-fg)]">
           <code>{cleanChart}</code>
         </pre>
       ) : error ? (
@@ -180,7 +186,6 @@ export function MermaidBlock({ chart }: MermaidBlockProps) {
         </div>
       ) : (
         <div
-          ref={containerRef}
           className="flex min-h-32 items-center justify-center overflow-x-auto p-4 transition-transform bg-background/50"
           style={{ transform: `scale(${zoom})`, transformOrigin: 'center center' }}
           dangerouslySetInnerHTML={{ __html: svg }}

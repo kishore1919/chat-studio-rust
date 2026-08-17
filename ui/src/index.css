@@ -1,6 +1,14 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
 
+/* react-virtuoso's scroll container. Reserves the scrollbar's width even
+   when it isn't currently showing, so ConversationTimeline's docked position
+   never overlaps it and never shifts as content grows past the scroll
+   threshold. */
+[data-testid='virtuoso-scroller'] {
+  scrollbar-gutter: stable;
+}
+
 /* highlight.js theme CSS text is injected into #hljs-theme by lib/theme.ts,
    swapped alongside data-theme rather than picked by a media query, since
    the user can override the OS preference from Settings. */
@@ -19,6 +27,14 @@
      --accent-bg (the tinted purple), while --primary (buttons, CTAs) maps
      to the solid --accent purple. */
 :root {
+  /* Overwritten by applyTheme's setProperty write once settings load; this is
+     only the pre-JS/no-settings fallback so text isn't unstyled at first paint. */
+  --chat-font-size: 14px;
+  /* Shared measure every message row centers in - ~75ch at the default 14px
+     size, and stays a comfortable reading width if the user bumps font-size.
+     Without this, each bubble sized itself against the full window: short
+     messages left a dead zone, and assistant cards varied width per message. */
+  --reading-max: 46rem;
   --bg: #ffffff;
   --bg-elevated: #f7f7f8;
   --bg-sidebar: #fafafa;
@@ -31,7 +47,6 @@
   --accent-bg: rgba(170, 59, 255, 0.1);
   --bubble-user: #efe7ff;
   --bubble-assistant: #f6f6f8;
-  --code-bg: #f4f3ec;
   --danger: #dc2626;
   --success: #16a34a;
   --shadow-xs: 0 1px 2px rgba(16, 16, 24, 0.06);
@@ -76,7 +91,6 @@
   --accent-bg: rgba(192, 132, 252, 0.15);
   --bubble-user: #362a4a;
   --bubble-assistant: #1e1f28;
-  --code-bg: #1f2028;
   --danger: #f87171;
   --success: #4ade80;
   --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.35);
@@ -141,9 +155,94 @@ pre {
   background: var(--accent-bg);
 }
 
-/* dark highlight.js theme, active only when data-theme=dark */
-:root[data-theme='dark'] .hljs {
-  background: var(--code-bg) !important;
+/* Code blocks always render GitHub Dark, regardless of the app's own
+   light/dark theme - fixed values here, not swapped per `data-theme`, so a
+   code block reads the same (and stays legible) no matter which app theme
+   is active. A custom VS Code theme's own `.hljs-*` rules (injected into
+   #app-theme-tokens, later in DOM order) still win over these where it
+   defines a given scope. */
+:root {
+  --code-bg: #0d1117;
+  --code-border: #30363d;
+  --code-header-bg: rgba(110, 118, 129, 0.1);
+  --code-fg: #e6edf3;
+  --code-muted: #8b949e;
+
+  --hljs-comment: #8b949e;
+  --hljs-string: #a5d6ff;
+  --hljs-keyword: #ff7b72;
+  --hljs-function: #d2a8ff;
+  --hljs-type: #ffa657;
+  --hljs-number: #79c0ff;
+  --hljs-variable: #ffa657;
+  --hljs-attr: #79c0ff;
+  --hljs-tag: #7ee787;
+  --hljs-deletion-fg: #ffa198;
+  --hljs-deletion-bg: rgba(248, 81, 73, 0.15);
+  --hljs-addition-fg: #7ee787;
+  --hljs-addition-bg: rgba(46, 160, 67, 0.15);
+}
+
+.hljs-comment,
+.hljs-quote {
+  color: var(--hljs-comment);
+  font-style: italic;
+}
+.hljs-string,
+.hljs-regexp,
+.hljs-link {
+  color: var(--hljs-string);
+}
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-operator {
+  color: var(--hljs-keyword);
+}
+.hljs-title.function_,
+.hljs-title,
+.hljs-section {
+  color: var(--hljs-function);
+}
+.hljs-title.class_,
+.hljs-type {
+  color: var(--hljs-type);
+}
+.hljs-number,
+.hljs-literal {
+  color: var(--hljs-number);
+}
+.hljs-variable,
+.hljs-params,
+.hljs-built_in,
+.hljs-name {
+  color: var(--hljs-variable);
+}
+.hljs-attr,
+.hljs-attribute,
+.hljs-symbol,
+.hljs-meta {
+  color: var(--hljs-attr);
+}
+.hljs-tag,
+.hljs-selector-class,
+.hljs-selector-id,
+.hljs-doctag,
+.hljs-bullet {
+  color: var(--hljs-tag);
+}
+.hljs-deletion {
+  color: var(--hljs-deletion-fg);
+  background: var(--hljs-deletion-bg);
+}
+.hljs-addition {
+  color: var(--hljs-addition-fg);
+  background: var(--hljs-addition-bg);
+}
+.hljs-emphasis {
+  font-style: italic;
+}
+.hljs-strong {
+  font-weight: 700;
 }
 
 /* Markdown typography & structure */

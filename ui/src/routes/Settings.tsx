@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   ArrowLeftIcon,
   CheckIcon,
@@ -10,8 +10,13 @@ import {
   Trash2Icon,
 } from 'lucide-react'
 import { useSettingsStore } from '../store/settings'
+// Static, not dynamic: Settings.tsx is already behind its own `React.lazy`
+// route split, so a further per-call `import()` here buys nothing and only
+// added latency to every color-picker drag tick.
+import { setThemeOverrides, useThemeStore } from '../store/theme'
 import { ipc } from '../lib/ipc'
-import type { ProviderConfig } from '../lib/types'
+import { useDebouncedCallback } from '../lib/utils'
+import type { ProviderConfig, Settings } from '../lib/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -29,12 +34,21 @@ import { cn } from '@/lib/utils'
 import { McpPane } from '../components/McpPane'
 import { SkillsPane } from '../components/SkillsPane'
 import { AgentsPane } from '../components/AgentsPane'
+import { PromptsPane } from '../components/PromptsPane'
+import { FEATURES } from '../lib/features'
 
 interface SettingsProps {
   onBack: () => void
 }
 
-type NavSection = 'model-provider' | 'default-model' | 'agents' | 'skills' | 'mcp' | 'appearance'
+type NavSection =
+  | 'model-provider'
+  | 'default-model'
+  | 'agents'
+  | 'skills'
+  | 'prompts'
+  | 'mcp'
+  | 'appearance'
 
 const NAV_GROUPS: { label: string; items: { id: NavSection; label: string }[] }[] = [
   {
@@ -47,8 +61,12 @@ const NAV_GROUPS: { label: string; items: { id: NavSection; label: string }[] }[
   {
     label: 'Agents & Skills',
     items: [
-      { id: 'agents', label: 'Agents & Assistants' },
-      { id: 'skills', label: 'Skills & Prompts' },
+      // Gated behind lib/features.ts until each has real backend wiring
+      // (both now apply via `set_conversation_system_prompt`). Prompts has
+      // no flag - it's a real feature from the start.
+      ...(FEATURES.agents ? [{ id: 'agents' as const, label: 'Agents & Assistants' }] : []),
+      ...(FEATURES.skills ? [{ id: 'skills' as const, label: 'Skills & Prompts' }] : []),
+      { id: 'prompts', label: 'Prompts' },
       { id: 'mcp', label: 'MCP Servers' },
     ],
   },
@@ -64,10 +82,17 @@ export function Settings({ onBack }: SettingsProps) {
   const [section, setSection] = useState<NavSection>('model-provider')
   const settings = useSettingsStore((s) => s.settings)
   const load = useSettingsStore((s) => s.load)
+  const headingRef = useRef<HTMLHeadingElement>(null)
 
   useEffect(() => {
     if (!settings) load()
   }, [settings, load])
+
+  useEffect(() => {
+    // App.tsx swaps routes by conditional render with no router - without
+    // this, focus lands on <body> on every navigation into Settings.
+    headingRef.current?.focus()
+  }, [])
 
   return (
     <div className="flex h-full flex-col bg-background">
@@ -75,7 +100,9 @@ export function Settings({ onBack }: SettingsProps) {
         <Button variant="ghost" size="sm" onClick={onBack} aria-label="Back to chat" className="text-xs">
           <ArrowLeftIcon /> Back
         </Button>
-        <span className="text-[13px] font-semibold tracking-tight">Settings</span>
+        <h1 ref={headingRef} tabIndex={-1} className="text-[13px] font-semibold tracking-tight outline-none">
+          Settings
+        </h1>
       </header>
       <div className="flex min-h-0 flex-1">
         <nav className="w-48 shrink-0 overflow-y-auto border-r border-border px-2 py-3">
@@ -108,6 +135,7 @@ export function Settings({ onBack }: SettingsProps) {
           {section === 'default-model' && <DefaultModelPane />}
           {section === 'agents' && <AgentsPane />}
           {section === 'skills' && <SkillsPane />}
+          {section === 'prompts' && <PromptsPane />}
           {section === 'mcp' && <McpPane />}
           {section === 'appearance' && <AppearancePane />}
         </div>
@@ -132,6 +160,7 @@ function AddProviderDialog({ onAdd }: { onAdd: (provider: ProviderConfig) => voi
       enabled: true,
       extra_headers: {},
       models: [],
+      disable_stream_options: false,
     })
     setName('')
     setBaseUrl('')
@@ -622,9 +651,23 @@ function ThemePreviewCard({
 function AppearancePane() {
   const settings = useSettingsStore((s) => s.settings)
   const save = useSettingsStore((s) => s.save)
+  const setLocalSettings = useSettingsStore((s) => s.setLocalSettings)
   const themeId = useSettingsStore((s) => s.settings?.theme_id ?? 'system')
   const [metas, setMetas] = useState<import('../lib/themes/types').ThemeMeta[]>([])
   const [importing, setImporting] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Applies on every tick for responsiveness; only the IPC write collapses to
+  // the last value once the drag/slide stops for 250ms. Without this, a drag
+  // fired a full `save_settings` round-trip (serializing the whole settings
+  // file, ~244KB if skills are populated) per tick.
+  const debouncedPersist = useDebouncedCallback((next: Settings) => {
+    void ipc.saveSettings(next)
+  }, 250)
+  const applyLive = (next: Settings) => {
+    setLocalSettings(next)
+    debouncedPersist(next)
+  }
 
   const refreshMetas = async () => {
     const { listAllMetas } = await import('../lib/themes/registry')
@@ -636,32 +679,31 @@ function AppearancePane() {
   }, [])
 
   const handleSelect = async (id: string) => {
-    const { useThemeStore } = await import('../store/theme')
     await useThemeStore.getState().setThemeId(id)
     if (settings) await save({ ...settings, theme_id: id })
     await refreshMetas()
   }
 
-  const handleImport = async () => {
-    const { open } = await import('@tauri-apps/plugin-dialog')
+  // No dialog/fs plugin: the capability file grants neither `fs:` nor
+  // `dialog:` permissions, so the previous plugin-based picker already
+  // failed its permission check at runtime. A native file input needs no
+  // Tauri permissions at all and gets the browsing UI for free.
+  const handleImportFile = async (file: File) => {
     const { invoke } = await import('@tauri-apps/api/core')
     const { toast } = await import('sonner')
-    const path = await open({ filters: [{ name: 'VS Code Theme', extensions: ['json'] }] })
-    if (!path || Array.isArray(path)) return
     setImporting(true)
     try {
-      const { readTextFile } = await import('@tauri-apps/plugin-fs')
-      const raw = await readTextFile(path as string)
+      const raw = await file.text()
       const parsed = JSON.parse(raw)
-      const base = (path as string).split(/[/\\]/).pop()?.replace(/\.json$/i, '') || parsed.name || 'custom'
+      const base = file.name.replace(/\.json$/i, '') || parsed.name || 'custom'
       const meta = await invoke<import('../lib/themes/types').ThemeMeta>('import_theme_content', {
         themeId: base,
         content: raw,
+        overwrite: false,
       })
       toast.success(`Imported ${meta.name}`)
       await handleSelect(meta.id)
     } catch (e) {
-      const { toast } = await import('sonner')
       toast.error(String(e))
     } finally {
       setImporting(false)
@@ -714,7 +756,24 @@ function AppearancePane() {
           })}
         </div>
         <div className="mt-3 flex flex-wrap gap-2">
-          <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs" onClick={() => void handleImport()} disabled={importing}>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".json,application/json"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0]
+              e.target.value = ''
+              if (file) void handleImportFile(file)
+            }}
+          />
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 gap-1.5 text-xs"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={importing}
+          >
             <PlusIcon className="size-3.5" /> {importing ? 'Importing…' : 'Import .json'}
           </Button>
           <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => void handleOpenFolder()}>
@@ -738,18 +797,16 @@ function AppearancePane() {
             <input
               type="color"
               value={settings.accent || '#007acc'}
-              onChange={async (e) => {
+              onChange={(e) => {
                 const accent = e.target.value
-                const { setThemeOverrides } = await import('../store/theme')
                 setThemeOverrides({ accent })
-                await save({ ...settings, accent })
+                applyLive({ ...settings, accent })
               }}
               className="size-7 cursor-pointer rounded border border-border bg-transparent p-0"
               title="Pick accent color"
             />
             {settings.accent && (
               <Button variant="ghost" size="sm" className="h-7 text-[11px]" onClick={async () => {
-                const { setThemeOverrides } = await import('../store/theme')
                 setThemeOverrides({ accent: null })
                 await save({ ...settings, accent: null })
               }}>
@@ -765,7 +822,6 @@ function AppearancePane() {
               key={c}
               type="button"
               onClick={async () => {
-                const { setThemeOverrides } = await import('../store/theme')
                 setThemeOverrides({ accent: c })
                 await save({ ...settings, accent: c })
               }}
@@ -790,7 +846,6 @@ function AppearancePane() {
               size="sm"
               className="h-7 flex-1 capitalize text-xs"
               onClick={async () => {
-                const { setThemeOverrides } = await import('../store/theme')
                 setThemeOverrides({ borderVisibility: v })
                 await save({ ...settings, border_visibility: v })
               }}
@@ -821,7 +876,11 @@ function AppearancePane() {
               max={18}
               step={1}
               value={settings.font_size}
-              onChange={(e) => save({ ...settings, font_size: Number(e.target.value) })}
+              onChange={(e) => {
+                const font_size = Number(e.target.value)
+                setThemeOverrides({ fontSize: font_size })
+                applyLive({ ...settings, font_size })
+              }}
               className="relative w-full appearance-none bg-transparent h-5 cursor-pointer [&::-webkit-slider-runnable-track]:h-1.5 [&::-webkit-slider-runnable-track]:rounded-full [&::-moz-range-track]:h-1.5 [&::-moz-range-track]:rounded-full [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:size-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-background [&::-webkit-slider-thumb]:shadow-sm [&::-webkit-slider-thumb]:-mt-[5px] [&::-moz-range-thumb]:size-4 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-primary [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-background [&::-moz-range-thumb]:shadow-sm"
             />
           </div>

@@ -15,6 +15,7 @@ import {
 import { useChatStore } from '../store/chat'
 import { useSettingsStore } from '../store/settings'
 import { cn } from '../lib/utils'
+import { FEATURES } from '../lib/features'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -69,6 +70,7 @@ export function ChatHeader({
   const activeConversationId = useChatStore((s) => s.activeConversationId)
   const conversations = useChatStore((s) => s.conversations)
   const setConversationModel = useChatStore((s) => s.setConversationModel)
+  const setConversationSystemPrompt = useChatStore((s) => s.setConversationSystemPrompt)
   const renameConversation = useChatStore((s) => s.renameConversation)
   const clearConversation = useChatStore((s) => s.clearConversation)
   const activeAgentId = useChatStore((s) => s.activeAgentId)
@@ -97,8 +99,14 @@ export function ChatHeader({
     }
     setActiveAgentId(agentId)
     const agent = agents.find((a) => a.id === agentId)
-    if (agent && agent.provider && agent.model && active) {
-      setConversationModel(active.id, agent.provider, agent.model)
+    if (agent && active) {
+      // This is what makes picking an agent actually do something - it used
+      // to only swap provider/model (and only for the few agents that
+      // specify one), never applying the agent's own system prompt.
+      setConversationSystemPrompt(active.id, agent.system_prompt)
+      if (agent.provider && agent.model) {
+        setConversationModel(active.id, agent.provider, agent.model)
+      }
     }
   }
 
@@ -188,48 +196,52 @@ export function ChatHeader({
             </button>
           )}
 
-          {/* Assistant Selector */}
-          <div className="flex items-center">
-            <span className="mx-1 text-muted-foreground/60">·</span>
-            <Select
-              value={currentAgent?.id ?? 'general-assistant'}
-              onValueChange={handleAgentSelect}
-            >
-              <SelectTrigger
-                size="sm"
-                className="h-7 max-w-44 border-0 bg-accent/40 px-2 shadow-none hover:bg-accent text-xs font-medium rounded-md"
-              >
-                <span className="flex items-center gap-1.5 truncate">
-                  {getAgentIcon(currentAgent?.icon ?? 'bot')}
-                  <span className="truncate">{currentAgent?.name ?? 'Assistant'}</span>
-                </span>
-              </SelectTrigger>
-              <SelectContent className="max-h-80 max-w-64">
-                <SelectGroup>
-                  <SelectLabel className="font-semibold text-xs">Assistants & Agents</SelectLabel>
-                  {agents.map((agent) => (
-                    <SelectItem key={agent.id} value={agent.id}>
-                      <div className="flex items-center gap-2">
-                        {getAgentIcon(agent.icon)}
-                        <div className="flex flex-col text-left">
-                          <span className="font-medium text-xs">{agent.name}</span>
-                          <span className="text-[10px] text-muted-foreground">{agent.role}</span>
-                        </div>
-                      </div>
+          {/* Assistant Selector - hidden while inert, see lib/features.ts */}
+          {FEATURES.agents && (
+            <>
+              <span className="mx-0.5 h-4 w-px bg-border/60" aria-hidden="true" />
+              <div className="flex items-center">
+                <Select
+                  value={currentAgent?.id ?? 'general-assistant'}
+                  onValueChange={handleAgentSelect}
+                >
+                  <SelectTrigger
+                    size="sm"
+                    className="h-7 max-w-44 border-0 bg-accent/40 px-2 shadow-none hover:bg-accent text-xs font-medium rounded-md"
+                  >
+                    <span className="flex items-center gap-1.5 truncate">
+                      {getAgentIcon(currentAgent?.icon ?? 'bot')}
+                      <span className="truncate">{currentAgent?.name ?? 'Assistant'}</span>
+                    </span>
+                  </SelectTrigger>
+                  <SelectContent className="max-h-80 max-w-64">
+                    <SelectGroup>
+                      <SelectLabel className="font-semibold text-xs">Assistants & Agents</SelectLabel>
+                      {agents.map((agent) => (
+                        <SelectItem key={agent.id} value={agent.id}>
+                          <div className="flex items-center gap-2">
+                            {getAgentIcon(agent.icon)}
+                            <div className="flex flex-col text-left">
+                              <span className="font-medium text-xs">{agent.name}</span>
+                              <span className="text-[10px] text-muted-foreground">{agent.role}</span>
+                            </div>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                    <SelectSeparator />
+                    <SelectItem value="__manage__" className="text-xs text-primary font-medium">
+                      + Manage Assistants in Settings...
                     </SelectItem>
-                  ))}
-                </SelectGroup>
-                <SelectSeparator />
-                <SelectItem value="__manage__" className="text-xs text-primary font-medium">
-                  + Manage Assistants in Settings...
-                </SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+                  </SelectContent>
+                </Select>
+              </div>
+            </>
+          )}
 
           {active && (
             <div className="flex items-center">
-              <span className="mx-1 text-muted-foreground/60">·</span>
+              {!FEATURES.agents && <span className="mx-0.5 h-4 w-px bg-border/60" aria-hidden="true" />}
               <Select
                 value={`${active.provider}${VALUE_SEP}${active.model}`}
                 onValueChange={handleSelect}

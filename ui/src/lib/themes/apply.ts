@@ -1,7 +1,12 @@
 import type { AppTheme } from './types'
 
-const VARS_ID = 'app-theme-vars'
 const TOKEN_ID = 'app-theme-tokens'
+
+/** Tracks which theme's rules are currently in the `<style>` element, so a
+ * same-theme call (an accent or border-visibility tweak) can skip rewriting
+ * it - only the id, not the whole object, so a re-resolved-but-identical
+ * theme still counts as unchanged. */
+let lastTokenThemeId: string | null = null
 
 function hexToRgba(hex: string, alpha: number): string {
   const h = hex.replace('#', '')
@@ -13,19 +18,23 @@ function hexToRgba(hex: string, alpha: number): string {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`
 }
 
+/** Writes each CSS variable individually via `style.setProperty` rather than
+ * rewriting a `<style>` block's `textContent`. Settings.tsx calls this on
+ * every color-picker drag tick, and the old approach forced a full-document
+ * style recalculation per tick; an inline style on `:root` also beats a
+ * stylesheet rule by specificity on its own, which is what the old
+ * `!important` hack stood in for. */
 export function applyTheme(
   theme: AppTheme,
-  opts?: { accent?: string | null; borderVisibility?: string },
+  opts?: { accent?: string | null; borderVisibility?: string; fontSize?: number },
 ) {
   document.documentElement.dataset.theme = theme.meta.type
+  const root = document.documentElement.style
 
-  let varsEl = document.getElementById(VARS_ID) as HTMLStyleElement | null
-  if (!varsEl) {
-    varsEl = document.createElement('style')
-    varsEl.id = VARS_ID
-    document.head.appendChild(varsEl)
-  }
   const vars = { ...theme.vars }
+  if (opts?.fontSize) {
+    vars['--chat-font-size'] = `${opts.fontSize}px`
+  }
   if (opts?.accent) {
     vars['--accent'] = opts.accent
     vars['--primary'] = opts.accent
@@ -33,7 +42,6 @@ export function applyTheme(
     vars['--accent-bg'] = hexToRgba(opts.accent, 0.12)
   }
   const vis = opts?.borderVisibility || 'subtle'
-  const borderAlpha = vis === 'hidden' ? '0' : vis === 'strong' ? '1' : vis === 'soft' ? '0.5' : '0.4'
   const borderVar = vars['--border'] || '#2d2d30'
   const borderStrongVar = vars['--border-strong'] || borderVar
   if (vis === 'hidden') {
@@ -43,21 +51,43 @@ export function applyTheme(
     const a = vis === 'soft' ? 0.35 : 0.4
     if (borderVar.startsWith('#')) vars['--border'] = hexToRgba(borderVar, a)
     if (borderStrongVar.startsWith('#')) vars['--border-strong'] = hexToRgba(borderStrongVar, a + 0.15)
-    void borderAlpha
   }
-  const lines = Object.entries(vars).map(([k, v]) => `  ${k}: ${v} !important;`)
-  varsEl.textContent = `:root, :root[data-theme='light'], :root[data-theme='dark'] {\n${lines.join('\n')}\n}`
 
-  let tokenEl = document.getElementById(TOKEN_ID) as HTMLStyleElement | null
-  if (!tokenEl) {
-    tokenEl = document.createElement('style')
-    tokenEl.id = TOKEN_ID
-    document.head.appendChild(tokenEl)
+  for (const [key, value] of Object.entries(vars)) {
+    // Skip the write entirely when unchanged - `setProperty` still triggers
+    // style invalidation even when the value is identical.
+    if (root.getPropertyValue(key) !== value) {
+      root.setProperty(key, value)
+    }
   }
-  tokenEl.textContent = theme.tokenCss
+
+  // Real CSS rules, not variables - keep as a stylesheet, but only rewrite it
+  // when the underlying theme actually changed, not on every accent/border
+  // tweak against the same theme.
+  if (lastTokenThemeId !== theme.meta.id) {
+    let tokenEl = document.getElementById(TOKEN_ID) as HTMLStyleElement | null
+    if (!tokenEl) {
+      tokenEl = document.createElement('style')
+      tokenEl.id = TOKEN_ID
+      document.head.appendChild(tokenEl)
+    }
+    tokenEl.textContent = theme.tokenCss
+    lastTokenThemeId = theme.meta.id
+  }
 }
 
 export function clearThemeOverrides() {
-  document.getElementById(VARS_ID)?.remove()
+  const root = document.documentElement.style
+  // Snapshot first - removing properties while iterating the live
+  // `CSSStyleDeclaration` would skip entries as the list shrinks underneath
+  // the loop.
+  const props: string[] = []
+  for (let i = 0; i < root.length; i++) {
+    props.push(root.item(i))
+  }
+  for (const prop of props) {
+    if (prop.startsWith('--')) root.removeProperty(prop)
+  }
   document.getElementById(TOKEN_ID)?.remove()
+  lastTokenThemeId = null
 }

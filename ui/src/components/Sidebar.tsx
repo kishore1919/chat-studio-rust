@@ -34,6 +34,8 @@ import { cn } from '@/lib/utils'
 
 interface SidebarProps {
   collapsed: boolean
+  /** Pins the sidebar open (vs. hover's temporary preview). */
+  onExpand: () => void
 }
 
 function relativeTime(unixSeconds: number) {
@@ -92,6 +94,14 @@ interface ConversationRowProps {
   onDelete: () => void
 }
 
+/** A correct `role="listbox"`/`role="option"` pattern needs roving
+ * `tabIndex`, `aria-activedescendant`, and full arrow/Home/End/type-ahead
+ * handling - and it's the wrong pattern regardless, since each row nests its
+ * own buttons (delete, the "more" menu), which is invalid inside an
+ * `option`. This uses the standard overlay-button pattern instead: a
+ * full-bleed button under everything provides native focus/Enter/Space/tab
+ * order, and the visible content sits above it with pointer-events
+ * re-enabled only on the bits that need their own clicks. */
 function ConversationRow({
   conv,
   active,
@@ -104,100 +114,101 @@ function ConversationRow({
   onDelete,
 }: ConversationRowProps) {
   return (
-    <div
-      role="option"
-      aria-selected={active || isSelected}
-      onClick={isSelectMode ? onToggleSelect : onSelect}
-      className={cn(
-        'group flex cursor-pointer items-start justify-between rounded-lg border px-2.5 py-2 text-[13px] transition-colors',
-        isSelected
-          ? 'border-primary/20 bg-primary/10 font-medium text-foreground'
-          : active
-            ? 'border-border/40 bg-accent font-medium text-foreground shadow-xs'
-            : 'border-transparent text-muted-foreground hover:border-border/30 hover:bg-accent/50 hover:text-foreground',
-      )}
-    >
-      <div className="flex min-w-0 flex-1 items-start gap-2">
-        {isSelectMode && (
-          <input
-            type="checkbox"
-            checked={isSelected}
-            onChange={onToggleSelect}
-            onClick={(e) => e.stopPropagation()}
-            className="mt-0.5 size-3.5 rounded border-border accent-primary cursor-pointer shrink-0"
-          />
+    <li className="group relative">
+      <button
+        type="button"
+        onClick={isSelectMode ? onToggleSelect : onSelect}
+        aria-label={`Open ${conv.title}`}
+        aria-current={active ? 'true' : undefined}
+        className="absolute inset-0 z-0 rounded-lg"
+      />
+      <div
+        className={cn(
+          'pointer-events-none relative z-10 flex items-start justify-between rounded-lg border px-2.5 py-2 text-[13px] transition-colors',
+          isSelected
+            ? 'border-primary/20 bg-primary/10 font-medium text-foreground'
+            : active
+              ? 'border-border/40 bg-accent font-medium text-foreground shadow-xs'
+              : 'border-transparent text-muted-foreground group-hover:border-border/30 group-hover:bg-accent/50 group-hover:text-foreground',
         )}
-        <div className="min-w-0 flex-1">
-          <div className="truncate text-foreground leading-snug">{conv.title}</div>
-          {conv.model && (
-            <div className="truncate text-[11px] text-muted-foreground font-mono">
-              {conv.model}
-            </div>
+      >
+        <div className="flex min-w-0 flex-1 items-start gap-2">
+          {isSelectMode && (
+            <input
+              type="checkbox"
+              checked={isSelected}
+              onChange={onToggleSelect}
+              className="pointer-events-auto mt-0.5 size-3.5 rounded border-border accent-primary cursor-pointer shrink-0"
+            />
           )}
-        </div>
-      </div>
-
-      {!isSelectMode && (
-        <div className="flex shrink-0 items-center gap-1 pl-1">
-          {conv.pinned && (
-            <PinIcon className="size-3 text-primary opacity-80 group-hover:hidden" />
-          )}
-          <span className="text-[11px] text-muted-foreground group-hover:hidden">
-            {!conv.pinned && relativeTime(conv.updated_at)}
-          </span>
-          <div className="hidden items-center gap-0.5 group-hover:flex">
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              onClick={(e) => {
-                e.stopPropagation()
-                onDelete()
-              }}
-              className="size-6 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-              title="Delete conversation"
-            >
-              <Trash2Icon className="size-3.5" />
-            </Button>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  onClick={(e) => e.stopPropagation()}
-                  className="size-6 text-muted-foreground hover:text-foreground"
-                  title="More actions"
-                >
-                  <MoreHorizontalIcon className="size-3.5" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
-                <DropdownMenuItem onClick={onTogglePin}>
-                  {conv.pinned ? (
-                    <>
-                      <PinOffIcon className="size-3.5 mr-1.5" /> Unpin
-                    </>
-                  ) : (
-                    <>
-                      <PinIcon className="size-3.5 mr-1.5" /> Pin
-                    </>
-                  )}
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={onRename}>
-                  <PencilIcon className="size-3.5 mr-1.5" /> Rename
-                </DropdownMenuItem>
-                <DropdownMenuItem variant="destructive" onClick={onDelete}>
-                  <Trash2Icon className="size-3.5 mr-1.5" /> Delete
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-foreground leading-snug">{conv.title}</div>
+            {conv.model && (
+              <div className="truncate text-[11px] text-muted-foreground font-mono">
+                {conv.model}
+              </div>
+            )}
           </div>
         </div>
-      )}
-    </div>
+
+        {!isSelectMode && (
+          <div className="pointer-events-auto flex shrink-0 items-center gap-1 pl-1">
+            {conv.pinned && (
+              <PinIcon className="size-3 text-primary opacity-80 group-hover:hidden" />
+            )}
+            <span className="text-[11px] text-muted-foreground group-hover:hidden">
+              {!conv.pinned && relativeTime(conv.updated_at)}
+            </span>
+            <div className="hidden items-center gap-0.5 group-hover:flex">
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={onDelete}
+                className="size-6 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                title="Delete conversation"
+              >
+                <Trash2Icon className="size-3.5" />
+              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    className="size-6 text-muted-foreground hover:text-foreground"
+                    title="More actions"
+                  >
+                    <MoreHorizontalIcon className="size-3.5" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={onTogglePin}>
+                    {conv.pinned ? (
+                      <>
+                        <PinOffIcon className="size-3.5 mr-1.5" /> Unpin
+                      </>
+                    ) : (
+                      <>
+                        <PinIcon className="size-3.5 mr-1.5" /> Pin
+                      </>
+                    )}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={onRename}>
+                    <PencilIcon className="size-3.5 mr-1.5" /> Rename
+                  </DropdownMenuItem>
+                  <DropdownMenuItem variant="destructive" onClick={onDelete}>
+                    <Trash2Icon className="size-3.5 mr-1.5" /> Delete
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          </div>
+        )}
+      </div>
+    </li>
   )
 }
 
-export function Sidebar({ collapsed }: SidebarProps) {
+export function Sidebar({ collapsed, onExpand }: SidebarProps) {
   const conversations = useChatStore((s) => s.conversations)
   const activeConversationId = useChatStore((s) => s.activeConversationId)
   const selectConversation = useChatStore((s) => s.selectConversation)
@@ -209,9 +220,6 @@ export function Sidebar({ collapsed }: SidebarProps) {
   const loadConversations = useChatStore((s) => s.loadConversations)
   const settings = useSettingsStore((s) => s.settings)
   const autoCreatedRef = useRef(false)
-
-  const [isHovered, setIsHovered] = useState(false)
-  const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const [search, setSearch] = useState('')
   const [isSelectMode, setIsSelectMode] = useState(false)
@@ -236,18 +244,6 @@ export function Sidebar({ collapsed }: SidebarProps) {
     autoCreatedRef.current = true
     createConversation(providerId, settings.default_model ?? '')
   }, [settings, conversations, createConversation])
-
-  const handleMouseEnter = () => {
-    if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current)
-    setIsHovered(true)
-  }
-
-  const handleMouseLeave = () => {
-    if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current)
-    hoverTimeoutRef.current = setTimeout(() => {
-      setIsHovered(false)
-    }, 300)
-  }
 
   const handleNewChat = () => {
     if (!settings) return
@@ -302,31 +298,28 @@ export function Sidebar({ collapsed }: SidebarProps) {
   return (
     <>
       {collapsed && (
-        <div
-          onMouseEnter={handleMouseEnter}
+        <button
+          type="button"
+          onClick={onExpand}
           className="group fixed top-0 bottom-0 left-0 z-30 w-12 cursor-pointer"
-          title="Hover to view chats"
+          title="Show sidebar"
           aria-label="Show sidebar"
+          aria-expanded={false}
+          aria-controls="conversation-sidebar"
         >
           <div className="flex h-full w-1 items-center justify-center bg-border/20 transition-colors group-hover:bg-primary/60">
             <ChevronRightIcon className="-ml-0.5 size-3 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
           </div>
-        </div>
+        </button>
       )}
 
-      {/* Main Sidebar */}
+      {/* Main Sidebar - opens only via explicit click/Ctrl+B, not on hover. */}
       <aside
-        onMouseEnter={collapsed ? handleMouseEnter : undefined}
-        onMouseLeave={collapsed ? handleMouseLeave : undefined}
+        id="conversation-sidebar"
         className={cn(
           'flex flex-col border-r border-border/40 bg-sidebar select-none transition-all duration-200 ease-[cubic-bezier(.16,1,.3,1)]',
           collapsed
-            ? cn(
-                'fixed top-0 bottom-0 left-0 z-40 w-[272px] shadow-2xl',
-                isHovered
-                  ? 'translate-x-0 opacity-100 pointer-events-auto'
-                  : '-translate-x-full opacity-0 pointer-events-none',
-              )
+            ? 'fixed top-0 bottom-0 left-0 z-40 w-[272px] shadow-2xl -translate-x-full opacity-0 pointer-events-none'
             : 'relative w-[272px] shrink-0',
         )}
       >
@@ -398,29 +391,28 @@ export function Sidebar({ collapsed }: SidebarProps) {
           )}
         </div>
 
-        <div role="listbox" aria-label="Conversations" className="flex-1 overflow-y-auto px-2">
+        <div aria-label="Conversations" className="flex-1 overflow-y-auto px-2">
           {grouped.map(([group, items]) => (
             <div key={group} className="mb-2">
               <div className="px-3 pb-1 text-[11px] font-medium tracking-wider text-muted-foreground uppercase">
                 {group}
               </div>
-              {items.map((conv) => (
-                <ConversationRow
-                  key={conv.id}
-                  conv={conv}
-                  active={conv.id === activeConversationId}
-                  isSelectMode={isSelectMode}
-                  isSelected={selectedIds.has(conv.id)}
-                  onToggleSelect={() => toggleSelectConversation(conv.id)}
-                  onSelect={() => {
-                    selectConversation(conv.id)
-                    if (collapsed) setIsHovered(false)
-                  }}
-                  onRename={() => openRename(conv.id, conv.title)}
-                  onTogglePin={() => pinConversation(conv.id, !conv.pinned)}
-                  onDelete={() => deleteConversation(conv.id)}
-                />
-              ))}
+              <ul>
+                {items.map((conv) => (
+                  <ConversationRow
+                    key={conv.id}
+                    conv={conv}
+                    active={conv.id === activeConversationId}
+                    isSelectMode={isSelectMode}
+                    isSelected={selectedIds.has(conv.id)}
+                    onToggleSelect={() => toggleSelectConversation(conv.id)}
+                    onSelect={() => selectConversation(conv.id)}
+                    onRename={() => openRename(conv.id, conv.title)}
+                    onTogglePin={() => pinConversation(conv.id, !conv.pinned)}
+                    onDelete={() => deleteConversation(conv.id)}
+                  />
+                ))}
+              </ul>
             </div>
           ))}
           {filtered.length === 0 && (

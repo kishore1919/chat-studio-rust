@@ -1,5 +1,6 @@
 import { MarkdownContent } from './MarkdownContent'
 import { ThinkingBar, extractThinking } from './ThinkingBar'
+import { MessageRow } from './MessageRow'
 import { useStreamingMessage } from '../store/chat'
 
 /** The only component that subscribes to the streaming slice. Renders
@@ -22,24 +23,28 @@ export function StreamingBubble() {
   const isThinkingActive = hasReasoning && !displayText
 
   return (
-    <div className="flex justify-start px-4 py-3">
-      <div className="max-w-[92%] min-w-0 flex-1">
-        <div className="mb-1 flex items-center gap-2 text-[12px]">
-          <span className="font-semibold text-foreground">Assistant</span>
-          <span className="inline-block size-1.5 animate-pulse rounded-full bg-primary" />
-        </div>
-
-          {displayReasoning && (
-            <ThinkingBar reasoning={displayReasoning} isStreaming={isThinkingActive} />
-          )}
-
-          {displayText && (
-            <div className="relative">
-              <MarkdownContent content={displayText} />
-              <span className="ml-0.5 inline-block h-4 w-1.5 animate-pulse bg-primary align-text-bottom" />
-            </div>
-          )}
+    <MessageRow className="py-3">
+      <div className="mb-1 flex items-center gap-2 text-[12px]">
+        <span className="rounded-md bg-primary/15 px-1.5 py-0.5 font-semibold text-primary">Assistant</span>
+        <span aria-hidden="true" className="inline-block size-1.5 animate-pulse rounded-full bg-primary" />
       </div>
-    </div>
+
+      {displayReasoning && <ThinkingBar reasoning={displayReasoning} isStreaming={isThinkingActive} />}
+
+      {displayText && (
+        <div className="relative">
+          <MarkdownContent content={displayText} />
+          <span aria-hidden="true" className="ml-0.5 inline-block h-4 w-1.5 animate-pulse bg-primary align-text-bottom" />
+        </div>
+      )}
+
+      {/* Announces status only, never the streaming text itself - piping
+          25Hz-updating content into a polite live region would flood and
+          starve the screen reader. The settled content is readable once the
+          stream finishes, which is where AT users would navigate anyway. */}
+      <div role="status" aria-live="polite" className="sr-only">
+        {displayText ? 'Assistant is responding' : 'Assistant is thinking'}
+      </div>
+    </MessageRow>
   )
 }

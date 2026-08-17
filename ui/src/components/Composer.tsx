@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
-import { ArrowUpIcon, LightbulbIcon, SquareIcon } from 'lucide-react'
+import { ArrowUpIcon, ChevronDownIcon, ClockIcon, MessageSquarePlusIcon, SquareIcon } from 'lucide-react'
 import { useChatStore } from '../store/chat'
 import { useSettingsStore } from '../store/settings'
-import type { Skill } from '../lib/types'
+import type { PromptTemplate, Skill } from '../lib/types'
+import { FEATURES } from '../lib/features'
 import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
 import {
@@ -17,6 +18,10 @@ const MIN_TEXTAREA_HEIGHT_PX = 24
 const MAX_TEXTAREA_HEIGHT_PX = 180
 
 type ThinkingMode = 'auto' | 'on' | 'off'
+
+function CheckCircleMark() {
+  return <span aria-hidden="true" className="size-2 shrink-0 rounded-full border-2 border-primary" />
+}
 
 interface CommandOption {
   key: string
@@ -33,26 +38,99 @@ export function Composer() {
   const sendMessage = useChatStore((s) => s.sendMessage)
   const cancelStream = useChatStore((s) => s.cancelStream)
   const clearConversation = useChatStore((s) => s.clearConversation)
+  const setConversationSystemPrompt = useChatStore((s) => s.setConversationSystemPrompt)
+  const createConversation = useChatStore((s) => s.createConversation)
   const isStreaming = useChatStore((s) => s.streaming !== null)
   const activeConversationId = useChatStore((s) => s.activeConversationId)
   const settings = useSettingsStore((s) => s.settings)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
+  const handleNewChat = () => {
+    if (!settings) return
+    const providerId = settings.default_provider ?? settings.providers[0]?.id
+    if (!providerId) return
+    createConversation(providerId, settings.default_model ?? '')
+  }
+
   const isCommandTriggered = text.startsWith('/')
   const commandQuery = isCommandTriggered ? text.slice(1).toLowerCase() : ''
 
-  const skills = settings?.skills?.filter((s: Skill) => s.enabled) ?? []
-  const skillCommands: CommandOption[] = skills.map((skill: Skill) => ({
-    key: skill.slash_command || skill.id,
-    label: `/${skill.slash_command || skill.id}`,
-    description: `${skill.name} - ${skill.description}`,
-    action: ({ setText }: { setText: (v: string) => void }) => {
-      setText(`[${skill.name}]: `)
-    },
-  }))
+  const skills = FEATURES.skills ? (settings?.skills?.filter((s: Skill) => s.enabled) ?? []) : []
 
-  const commands: CommandOption[] = [
-    ...skillCommands,
+  // Applies the skill's prompt as this conversation's system prompt for real
+  // (via `set_conversation_system_prompt`) - it used to just type a label
+  // into the textarea. See lib/features.ts.
+  const applySkill = (skill: Skill) => {
+    if (activeConversationId === null) return
+    setConversationSystemPrompt(activeConversationId, skill.system_prompt)
+    setText('')
+  }
+
+  // "/skill" alone opens a name-picker submenu; "/skill <name>" filters it as
+  // the user types, matching the id or the display name.
+  const skillMatch = /^\/skill(?:\s+(.*))?$/i.exec(text)
+  const isSkillPicking = FEATURES.skills && skillMatch !== null
+  const skillQuery = (skillMatch?.[1] ?? '').trim().toLowerCase()
+
+  const skillCommands: CommandOption[] = skills
+    .filter((skill: Skill) => {
+      if (!skillQuery) return true
+      const id = (skill.slash_command || skill.id).toLowerCase()
+      return id.includes(skillQuery) || skill.name.toLowerCase().includes(skillQuery)
+    })
+    .map((skill: Skill) => ({
+      key: skill.slash_command || skill.id,
+      label: `/skill ${skill.slash_command || skill.id}`,
+      description: skill.description,
+      action: () => applySkill(skill),
+    }))
+
+  const prompts = settings?.prompts ?? []
+
+  // Inserts the saved snippet as the draft message text - unlike a skill,
+  // this never touches the conversation's system prompt.
+  const applyPrompt = (prompt: PromptTemplate) => {
+    setText(prompt.content)
+  }
+
+  // "/prompt" alone opens a name-picker submenu; "/prompt <name>" filters it
+  // as the user types, matching the id or the display name.
+  const promptMatch = /^\/prompt(?:\s+(.*))?$/i.exec(text)
+  const isPromptPicking = promptMatch !== null
+  const promptQuery = (promptMatch?.[1] ?? '').trim().toLowerCase()
+
+  const promptCommands: CommandOption[] = prompts
+    .filter((prompt) => {
+      if (!promptQuery) return true
+      return (
+        prompt.id.toLowerCase().includes(promptQuery) ||
+        prompt.name.toLowerCase().includes(promptQuery)
+      )
+    })
+    .map((prompt) => ({
+      key: prompt.id,
+      label: `/prompt ${prompt.name}`,
+      description: prompt.content,
+      action: () => applyPrompt(prompt),
+    }))
+
+  const topLevelCommands: CommandOption[] = [
+    ...(FEATURES.skills
+      ? [
+          {
+            key: 'skill',
+            label: '/skill <name>',
+            description: "Apply a skill as this conversation's system prompt",
+            action: ({ setText }: { setText: (v: string) => void }) => setText('/skill '),
+          },
+        ]
+      : []),
+    {
+      key: 'prompt',
+      label: '/prompt <name>',
+      description: 'Insert a saved prompt as your draft message',
+      action: ({ setText }) => setText('/prompt '),
+    },
     {
       key: 'clear',
       label: '/clear',
@@ -83,9 +161,13 @@ export function Composer() {
     },
   ]
 
-  const filteredCommands = isCommandTriggered
-    ? commands.filter((c) => c.key.toLowerCase().includes(commandQuery.toLowerCase()))
-    : []
+  const filteredCommands = isSkillPicking
+    ? skillCommands
+    : isPromptPicking
+      ? promptCommands
+      : isCommandTriggered
+        ? topLevelCommands.filter((c) => c.key.toLowerCase().includes(commandQuery))
+        : []
 
   const showCommandMenu = isCommandTriggered && filteredCommands.length > 0
 
@@ -172,125 +254,156 @@ export function Composer() {
         setDragOver(false)
       }}
     >
-      {showCommandMenu ? (
-        <div
-          role="listbox"
-          aria-label="Commands"
-          className="absolute bottom-full left-3 z-30 mb-2 w-64 overflow-hidden rounded-lg border border-border bg-popover p-1 shadow-md"
-        >
-          <div className="px-2 py-1 text-[10px] font-medium tracking-wider text-muted-foreground uppercase">
-            Commands
+      {/* Matches the message list's reading column (see MessageRow) instead
+          of stretching edge-to-edge, so the input sits the same width as the
+          bubbles above it. */}
+      <div className="relative mx-auto w-full max-w-[var(--reading-max)]">
+        {showCommandMenu ? (
+          <div
+            role="listbox"
+            aria-label="Commands"
+            className="absolute bottom-full left-3 z-30 mb-2 w-64 overflow-hidden rounded-lg border border-border bg-popover p-1 shadow-md"
+          >
+            <div className="px-2 py-1 text-[10px] font-medium tracking-wider text-muted-foreground uppercase">
+              {isSkillPicking ? 'Skills' : isPromptPicking ? 'Prompts' : 'Commands'}
+            </div>
+            {filteredCommands.map((cmd, idx) => {
+              const isSelected = idx === menuIndex
+              return (
+                <button
+                  key={cmd.key}
+                  type="button"
+                  role="option"
+                  aria-selected={isSelected}
+                  onClick={() => cmd.action({ text, setText })}
+                  className={cn(
+                    'flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-xs transition-colors',
+                    isSelected
+                      ? 'bg-accent font-medium text-accent-foreground'
+                      : 'text-foreground hover:bg-muted',
+                  )}
+                >
+                  <span className="font-mono shrink-0">{cmd.label}</span>
+                  <span className="ml-2 max-w-[180px] truncate text-[11px] text-muted-foreground">
+                    {cmd.description}
+                  </span>
+                </button>
+              )
+            })}
           </div>
-          {filteredCommands.map((cmd, idx) => {
-            const isSelected = idx === menuIndex
-            return (
-              <button
-                key={cmd.key}
-                type="button"
-                role="option"
-                aria-selected={isSelected}
-                onClick={() => cmd.action({ text, setText })}
-                className={cn(
-                  'flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-xs transition-colors',
-                  isSelected
-                    ? 'bg-accent font-medium text-accent-foreground'
-                    : 'text-foreground hover:bg-muted',
-                )}
-              >
-                <span className="font-mono">{cmd.label}</span>
-                <span className="text-[11px] text-muted-foreground">{cmd.description}</span>
-              </button>
-            )
-          })}
-        </div>
-      ) : isCommandTriggered ? (
-        <div className="absolute bottom-full left-3 z-30 mb-2 rounded-lg border border-border bg-popover px-3 py-2 text-xs text-muted-foreground shadow-md">
-          No commands match &quot;{commandQuery}&quot;
-        </div>
-      ) : null}
+        ) : isCommandTriggered ? (
+          <div className="absolute bottom-full left-3 z-30 mb-2 rounded-lg border border-border bg-popover px-3 py-2 text-xs text-muted-foreground shadow-md">
+            {isSkillPicking
+              ? `No skills match "${skillQuery}"`
+              : isPromptPicking
+                ? `No prompts match "${promptQuery}"`
+                : `No commands match "${commandQuery}"`}
+          </div>
+        ) : null}
 
-      <div
-        className={cn(
-          'flex items-end gap-2 rounded-2xl border bg-card px-3 py-2 shadow-xs transition-colors focus-within:ring-1 focus-within:ring-primary/20',
-          dragOver ? 'border-primary/40' : 'border-border/60',
-        )}
-      >
-        <Textarea
-          ref={textareaRef}
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder="Type a message. Press Enter to send, Shift+Enter for a new line."
-          rows={1}
+        <div
           className={cn(
-            'min-h-[24px] max-h-[180px] flex-1 resize-none overflow-y-auto border-0 bg-transparent p-0 text-sm leading-normal shadow-none',
-            'focus-visible:ring-0',
+            'flex flex-col gap-2 rounded-2xl border bg-card px-3 py-2.5 shadow-xs transition-colors focus-within:ring-1 focus-within:ring-primary/20',
+            dragOver ? 'border-primary/40' : 'border-border/60',
           )}
-        />
+        >
+          <Textarea
+            ref={textareaRef}
+            id="composer-textarea"
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="Type a message. Press Enter to send, Shift+Enter for a new line. Type / for commands."
+            rows={1}
+            className={cn(
+              'min-h-[24px] max-h-[180px] w-full resize-none overflow-y-auto border-0 bg-transparent p-0 text-sm leading-normal shadow-none',
+              'focus-visible:ring-0',
+            )}
+          />
 
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button
+          <div className="flex items-center justify-between">
+            <Button
               type="button"
-              aria-label={`Thinking mode: ${thinkingLabels[thinkingMode]}`}
-              className={cn(
-                'flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full transition-colors',
-                thinkingMode === 'on'
-                  ? 'bg-primary/20 text-primary'
-                  : thinkingMode === 'off'
-                    ? 'text-muted-foreground/40 hover:bg-muted hover:text-foreground'
-                    : 'text-muted-foreground hover:bg-muted hover:text-foreground',
-              )}
-              title={`Thinking Mode: ${thinkingLabels[thinkingMode]}`}
+              variant="ghost"
+              size="icon-sm"
+              onClick={handleNewChat}
+              aria-label="New chat"
+              title="New chat"
+              className="size-8 shrink-0 rounded-full text-muted-foreground hover:text-foreground"
             >
-              <LightbulbIcon className="size-4" />
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-44 text-xs">
-            <DropdownMenuItem onClick={() => setThinkingMode('auto')}>
-              <div className="flex flex-col">
-                <span className="font-medium">Auto</span>
-                <span className="text-[10px] text-muted-foreground">Model decides reasoning</span>
-              </div>
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => setThinkingMode('on')}>
-              <div className="flex flex-col">
-                <span className="font-medium">Thinking: On</span>
-                <span className="text-[10px] text-muted-foreground">Encourages deep reasoning</span>
-              </div>
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => setThinkingMode('off')}>
-              <div className="flex flex-col">
-                <span className="font-medium">Thinking: Off</span>
-                <span className="text-[10px] text-muted-foreground">Standard direct output</span>
-              </div>
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+              <MessageSquarePlusIcon className="size-4" />
+            </Button>
 
-        {isStreaming ? (
-          <Button
-            onClick={cancelStream}
-            size="icon"
-            variant="destructive"
-            aria-label="Stop generating"
-            className="size-8 shrink-0 rounded-full"
-            title="Stop (Esc)"
-          >
-            <SquareIcon className="size-3.5 fill-current" />
-          </Button>
-        ) : (
-          <Button
-            onClick={handleSend}
-            disabled={!text.trim()}
-            size="icon"
-            aria-label={text.trim() ? 'Send message' : 'Type a message to send'}
-            className="size-8 shrink-0 rounded-full"
-            title="Send (Enter)"
-          >
-            <ArrowUpIcon className="size-4" />
-          </Button>
-        )}
+            <div className="flex items-center gap-2">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    aria-label={`Thinking effort: ${thinkingLabels[thinkingMode]}`}
+                    className={cn(
+                      'flex h-8 shrink-0 cursor-pointer items-center gap-1 rounded-full border px-2.5 text-xs font-medium transition-colors',
+                      thinkingMode === 'on'
+                        ? 'border-primary/40 bg-primary/15 text-primary'
+                        : 'border-border/60 text-muted-foreground hover:bg-muted hover:text-foreground',
+                    )}
+                    title={`Thinking effort: ${thinkingLabels[thinkingMode]}`}
+                  >
+                    <ClockIcon className="size-3.5" />
+                    <span>{thinkingLabels[thinkingMode]}</span>
+                    <ChevronDownIcon className="size-3" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-44 text-xs">
+                  <DropdownMenuItem onClick={() => setThinkingMode('off')}>
+                    <div className="flex flex-1 flex-col">
+                      <span className="font-medium">Off</span>
+                      <span className="text-[10px] text-muted-foreground">Standard direct output</span>
+                    </div>
+                    {thinkingMode === 'off' && <CheckCircleMark />}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setThinkingMode('on')}>
+                    <div className="flex flex-1 flex-col">
+                      <span className="font-medium">On</span>
+                      <span className="text-[10px] text-muted-foreground">Encourages deep reasoning</span>
+                    </div>
+                    {thinkingMode === 'on' && <CheckCircleMark />}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setThinkingMode('auto')}>
+                    <div className="flex flex-1 flex-col">
+                      <span className="font-medium">Auto</span>
+                      <span className="text-[10px] text-muted-foreground">Model decides reasoning</span>
+                    </div>
+                    {thinkingMode === 'auto' && <CheckCircleMark />}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              {isStreaming ? (
+                <Button
+                  onClick={cancelStream}
+                  size="icon"
+                  variant="destructive"
+                  aria-label="Stop generating"
+                  className="size-8 shrink-0 rounded-full"
+                  title="Stop (Esc)"
+                >
+                  <SquareIcon className="size-3.5 fill-current" />
+                </Button>
+              ) : (
+                <Button
+                  onClick={handleSend}
+                  disabled={!text.trim()}
+                  size="icon"
+                  aria-label={text.trim() ? 'Send message' : 'Type a message to send'}
+                  className="size-8 shrink-0 rounded-full"
+                  title="Send (Enter)"
+                >
+                  <ArrowUpIcon className="size-4" />
+                </Button>
+              )}
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   )

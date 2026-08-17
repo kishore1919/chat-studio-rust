@@ -10,8 +10,9 @@ import {
   ZoomInIcon,
   ZoomOutIcon,
 } from 'lucide-react'
-import { useChatStore } from '../store/chat'
+import { useChatStore, useConversationMessages } from '../store/chat'
 import type { Message } from '../lib/types'
+import { TIME_FMT } from '../lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 
@@ -21,10 +22,7 @@ interface MindMapPanelProps {
 }
 
 function formatTime(timestamp: number) {
-  return new Date(timestamp * 1000).toLocaleTimeString([], {
-    hour: '2-digit',
-    minute: '2-digit',
-  })
+  return TIME_FMT.format(new Date(timestamp * 1000))
 }
 
 function truncateText(text: string, maxLen = 48) {
@@ -36,14 +34,16 @@ function truncateText(text: string, maxLen = 48) {
 export function MindMapPanel({ onClose, onSelectMessage }: MindMapPanelProps) {
   const activeConversationId = useChatStore((s) => s.activeConversationId)
   const conversations = useChatStore((s) => s.conversations)
-  const messagesByConversation = useChatStore((s) => s.messagesByConversation)
+  // Subscribing to one conversation rather than the whole map: this used to
+  // re-render on any conversation's messages changing, and returned a fresh
+  // `?? []` each time, which also defeated the useMemo below.
+  const messages = useConversationMessages(activeConversationId)
 
   const [search, setSearch] = useState('')
   const [zoom, setZoom] = useState(1)
   const [selectedNodeId, setSelectedNodeId] = useState<number | null>(null)
 
   const activeConv = conversations.find((c) => c.id === activeConversationId)
-  const messages = (activeConversationId ? messagesByConversation[activeConversationId] : []) ?? []
 
   // Extract all user input messages
   const userMessages = useMemo(() => {
@@ -164,13 +164,13 @@ export function MindMapPanel({ onClose, onSelectMessage }: MindMapPanelProps) {
                 Origin ({userMessages.length} total prompts)
               </div>
               {/* Connecting line anchor */}
-              <div className="absolute -bottom-6 left-6 h-6 w-0.5 bg-gradient-to-b from-primary/50 to-border" />
+              <div aria-hidden="true" className="absolute -bottom-6 left-6 h-6 w-0.5 bg-gradient-to-b from-primary/50 to-border" />
             </div>
 
             {/* Input Message Line Tree */}
             <div className="relative pl-6 space-y-4">
               {/* Vertical trunk line */}
-              <div className="absolute left-6 top-0 bottom-4 w-0.5 bg-border/80" />
+              <div aria-hidden="true" className="absolute left-6 top-0 bottom-4 w-0.5 bg-border/80" />
 
               {filteredNodes.map((msg, index) => {
                 const isSelected = selectedNodeId === msg.id
@@ -179,10 +179,11 @@ export function MindMapPanel({ onClose, onSelectMessage }: MindMapPanelProps) {
                 return (
                   <div key={msg.id} className="relative flex items-start group">
                     {/* Horizontal Branch Connector Line */}
-                    <div className="absolute -left-6 top-3.5 h-0.5 w-6 bg-border/80 group-hover:bg-primary/60 transition-colors" />
+                    <div aria-hidden="true" className="absolute -left-6 top-3.5 h-0.5 w-6 bg-border/80 group-hover:bg-primary/60 transition-colors" />
 
                     {/* Node Dot */}
                     <div
+                      aria-hidden="true"
                       className={`absolute -left-[27px] top-2.5 size-3 rounded-full border-2 transition-all ${
                         isSelected
                           ? 'border-primary bg-primary ring-2 ring-primary/30'

@@ -11,11 +11,31 @@ interface ChatProps {
   onOpenSettings: () => void
 }
 
+const SIDEBAR_COLLAPSED_KEY = 'chat-studio-sidebar-collapsed'
+
 export function Chat({ onOpenSettings }: ChatProps) {
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(true)
+  // A chat app's conversation list should be visible by default - hover-to-
+  // reveal (when collapsed) is a power-user affordance, not a default. Once
+  // the user picks a state, it's remembered across launches.
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(
+    () => localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === 'true',
+  )
   const [mindMapOpen, setMindMapOpen] = useState(false)
   const [targetMessageId, setTargetMessageId] = useState<number | null>(null)
   const activeConversationId = useChatStore((s) => s.activeConversationId)
+
+  useEffect(() => {
+    localStorage.setItem(SIDEBAR_COLLAPSED_KEY, String(sidebarCollapsed))
+  }, [sidebarCollapsed])
+
+  useEffect(() => {
+    // App.tsx swaps Chat<->Settings by conditional render, so Chat fully
+    // unmounts/remounts on each transition - this fires both on first load
+    // and every time the user returns from Settings, restoring focus to
+    // where the previous session's <body> focus (from Settings' back
+    // button) would otherwise have left it.
+    document.getElementById('composer-textarea')?.focus()
+  }, [])
 
   useEffect(() => {
     const handler = (e: globalThis.KeyboardEvent) => {
@@ -25,6 +45,9 @@ export function Chat({ onOpenSettings }: ChatProps) {
       } else if ((e.ctrlKey || e.metaKey) && (e.key === 'm' || e.key === 'M')) {
         e.preventDefault()
         setMindMapOpen((v) => !v)
+      } else if ((e.ctrlKey || e.metaKey) && (e.key === 'b' || e.key === 'B')) {
+        e.preventDefault()
+        setSidebarCollapsed((v) => !v)
       }
     }
     window.addEventListener('keydown', handler)
@@ -38,8 +61,8 @@ export function Chat({ onOpenSettings }: ChatProps) {
   }
 
   return (
-    <div className="flex h-full w-full min-w-[720px] overflow-hidden bg-background">
-      <Sidebar collapsed={sidebarCollapsed} />
+    <div className="flex h-full w-full overflow-hidden bg-background">
+      <Sidebar collapsed={sidebarCollapsed} onExpand={() => setSidebarCollapsed(false)} />
       <div className="relative flex min-w-0 flex-1 flex-col overflow-hidden">
         <ChatHeader
           onToggleSidebar={() => setSidebarCollapsed((v) => !v)}

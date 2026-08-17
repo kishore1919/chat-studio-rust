@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
 import { Chat } from './routes/Chat'
 import { useSettingsStore } from './store/settings'
+import { useThemeStore } from './store/theme'
 import { Toaster } from '@/components/ui/sonner'
 import { StreamErrorWatcher } from '@/components/StreamErrorWatcher'
 
@@ -19,6 +20,18 @@ export default function App() {
   useEffect(() => {
     load().then(prefetchEnabledProviderModels)
   }, [load, prefetchEnabledProviderModels])
+
+  useEffect(() => {
+    // Lives here rather than at theme.ts module scope: a module-scope
+    // `addEventListener` with no matching removal duplicated on every HMR
+    // boundary in dev, which read as phantom theme flips while developing.
+    // Benign at app scope since App only mounts once, but cleaning it up
+    // properly costs nothing.
+    const mq = window.matchMedia('(prefers-color-scheme: dark)')
+    const handler = () => void useThemeStore.getState().refreshIfSystem()
+    mq.addEventListener('change', handler)
+    return () => mq.removeEventListener('change', handler)
+  }, [])
 
   return (
     <div className="h-screen w-screen overflow-hidden bg-background text-foreground">

@@ -33,80 +33,116 @@ function effectiveId(id: string): string {
   return id
 }
 
-let currentAccent: string | null = null
-let currentBorderVisibility = 'subtle'
-
-async function applyById(id: string): Promise<AppTheme | null> {
-  const eff = effectiveId(id)
-  const theme = await getTheme(eff)
-  if (theme) {
-    applyTheme(theme, { accent: currentAccent, borderVisibility: currentBorderVisibility })
-    return theme
-  }
-  const fallback = await getTheme('dark-modern')
-  if (fallback) applyTheme(fallback, { accent: currentAccent, borderVisibility: currentBorderVisibility })
-  return fallback
+interface ThemeOverrides {
+  accent: string | null
+  borderVisibility: string
+  fontSize: number
 }
 
-export function setThemeOverrides(opts: { accent?: string | null; borderVisibility?: string }) {
-  if (opts.accent !== undefined) currentAccent = opts.accent || null
-  if (opts.borderVisibility !== undefined) currentBorderVisibility = opts.borderVisibility
-  const { themeId, resolved } = useThemeStore.getState()
-  if (resolved) applyTheme(resolved, { accent: currentAccent, borderVisibility: currentBorderVisibility })
-  void themeId
+const DEFAULT_OVERRIDES: ThemeOverrides = {
+  accent: null,
+  borderVisibility: 'subtle',
+  fontSize: 14,
 }
 
 interface ThemeState {
   themeId: string
   effectiveId: string
   resolved: AppTheme | null
+  overrides: ThemeOverrides
   setThemeId: (id: string) => Promise<void>
+  setOverrides: (opts: Partial<ThemeOverrides>) => void
+  /** Re-resolves and re-applies only if currently following the OS
+   * preference - a no-op otherwise. Called by App.tsx's matchMedia listener. */
+  refreshIfSystem: () => Promise<void>
   init: () => Promise<void>
 }
 
+async function resolveAndApply(id: string, overrides: ThemeOverrides): Promise<AppTheme | null> {
+  const eff = effectiveId(id)
+  const theme = await getTheme(eff)
+  if (theme) {
+    applyTheme(theme, overrides)
+    return theme
+  }
+  const fallback = await getTheme('dark-modern')
+  if (fallback) applyTheme(fallback, overrides)
+  return fallback
+}
+
+// `settings.theme_id` (persisted server-side) is the single source of truth
+// once settings load; `localStorage` is a write-through cache read only by
+// index.html's pre-paint inline script (which can't await an IPC round-trip
+// before first paint); `themeId` here is a mirror, written only by
+// `setThemeId`. Overrides (accent/border/font-size) used to live as bare
+// module-level `let`s that React couldn't observe - moved into real store
+// state so Settings can read them reactively instead of reaching past the
+// store.
 export const useThemeStore = create<ThemeState>((set, get) => ({
   themeId: initialThemeId(),
   effectiveId: effectiveId(initialThemeId()),
   resolved: null,
+  overrides: DEFAULT_OVERRIDES,
 
-  setThemeId: async (id: string) => {
+  setThemeId: async (id) => {
     localStorage.setItem(STORAGE_KEY, id)
     localStorage.removeItem(LEGACY_KEY)
     const eff = effectiveId(id)
-    const theme = await applyById(id)
+    const theme = await resolveAndApply(id, get().overrides)
     set({ themeId: id, effectiveId: eff, resolved: theme })
+  },
+
+  setOverrides: (opts) => {
+    const overrides = { ...get().overrides, ...opts }
+    set({ overrides })
+    const resolved = get().resolved
+    if (resolved) applyTheme(resolved, overrides)
+  },
+
+  refreshIfSystem: async () => {
+    if (get().themeId !== 'system') return
+    const theme = await resolveAndApply('system', get().overrides)
+    set({ effectiveId: resolveSystemId(), resolved: theme })
   },
 
   init: async () => {
     const id = get().themeId
-    const theme = await applyById(id)
+    const theme = await resolveAndApply(id, get().overrides)
     set({ effectiveId: effectiveId(id), resolved: theme })
   },
 }))
 
-void useThemeStore.getState().init()
+/** Must run before `createRoot().render()` in main.tsx. index.html's inline
+ * script sets `data-theme` pre-paint from localStorage alone (it can't await
+ * an IPC settings round-trip); deferring this call into a React effect would
+ * reintroduce a flash of the wrong palette between first paint and the
+ * effect running. */
+export function initTheme() {
+  void useThemeStore.getState().init()
+}
 
-window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
-  const { themeId } = useThemeStore.getState()
-  if (themeId !== 'system') return
-  void applyById('system').then((theme) => {
-    useThemeStore.setState({ effectiveId: resolveSystemId(), resolved: theme })
-  })
-})
+export function setThemeOverrides(opts: { accent?: string | null; borderVisibility?: string; fontSize?: number }) {
+  useThemeStore.getState().setOverrides(opts)
+}
 
-export function syncThemeFromSettings(themeId: string, accent?: string | null, borderVisibility?: string) {
-  if (accent !== undefined || borderVisibility) {
-    setThemeOverrides({ accent: accent ?? null, borderVisibility: borderVisibility || 'subtle' })
+export function syncThemeFromSettings(
+  themeId: string,
+  accent?: string | null,
+  borderVisibility?: string,
+  fontSize?: number,
+) {
+  const hasOverrides = accent !== undefined || borderVisibility !== undefined || fontSize !== undefined
+  if (hasOverrides) {
+    setThemeOverrides({ accent: accent ?? null, borderVisibility: borderVisibility || 'subtle', fontSize })
   }
   const current = useThemeStore.getState().themeId
   if (themeId && themeId !== current) {
     void useThemeStore.getState().setThemeId(themeId)
   } else if (!themeId && current === 'system') {
     void useThemeStore.getState().init()
-  } else if (accent !== undefined || borderVisibility) {
-    const resolved = useThemeStore.getState().resolved
-    if (resolved) applyTheme(resolved, { accent: accent ?? null, borderVisibility: borderVisibility || 'subtle' })
   }
+  // `setOverrides` above already re-applied against the currently resolved
+  // theme, so there's nothing left to do when only overrides changed.
 }
 
 export function themeTypeForMermaid(): 'dark' | 'default' {

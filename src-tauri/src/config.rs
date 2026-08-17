@@ -30,6 +30,10 @@ pub struct ProviderConfig {
     pub extra_headers: std::collections::BTreeMap<String, String>,
     #[serde(default)]
     pub models: Vec<String>,
+    /// Escape hatch for endpoints that reject an unrecognized
+    /// `stream_options` field outright instead of ignoring it.
+    #[serde(default)]
+    pub disable_stream_options: bool,
 }
 
 fn default_true() -> bool {
@@ -180,6 +184,17 @@ fn default_agents() -> Vec<AgentConfig> {
     ]
 }
 
+/// A saved message snippet, applied via `/prompt <name>` in the composer -
+/// distinct from a Skill/Agent's `system_prompt`: this is inserted as the
+/// draft message text for the user to review and send, not a persona change
+/// applied to the conversation.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct PromptTemplate {
+    pub id: String,
+    pub name: String,
+    pub content: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Settings {
     #[serde(default)]
@@ -206,6 +221,14 @@ pub struct Settings {
     pub skills: Vec<Skill>,
     #[serde(default = "default_agents")]
     pub agents: Vec<AgentConfig>,
+    #[serde(default)]
+    pub prompts: Vec<PromptTemplate>,
+    /// Soft budget for how much history `prepare_chat` sends per turn. Not an
+    /// exact token count - no tokenizer is bundled - just a conservative
+    /// chars-per-token proxy, so undercounting drops one old turn rather than
+    /// overshooting a provider's real limit.
+    #[serde(default = "default_context_tokens")]
+    pub context_tokens: u32,
 }
 
 fn default_theme() -> ThemePreference {
@@ -235,6 +258,10 @@ fn default_font_size() -> u32 {
     14
 }
 
+fn default_context_tokens() -> u32 {
+    32768
+}
+
 impl Default for Settings {
     fn default() -> Self {
         Settings {
@@ -248,6 +275,7 @@ impl Default for Settings {
                     enabled: true,
                     extra_headers: Default::default(),
                     models: Vec::new(),
+                    disable_stream_options: false,
                 },
                 ProviderConfig {
                     id: "nvidia-nim".into(),
@@ -258,6 +286,7 @@ impl Default for Settings {
                     enabled: true,
                     extra_headers: Default::default(),
                     models: Vec::new(),
+                    disable_stream_options: false,
                 },
                 ProviderConfig {
                     id: "ollama-cloud".into(),
@@ -268,6 +297,7 @@ impl Default for Settings {
                     enabled: true,
                     extra_headers: Default::default(),
                     models: Vec::new(),
+                    disable_stream_options: false,
                 },
             ],
             default_provider: None,
@@ -281,21 +311,75 @@ impl Default for Settings {
             mcp_servers: Vec::new(),
             skills: default_skills(),
             agents: default_agents(),
+            prompts: Vec::new(),
+            context_tokens: default_context_tokens(),
         }
     }
 }
 
+/// Resolved once and cached. The fallback chain exists because the previous
+/// `expect` turned an unusual environment into a silent abort at startup - in a
+/// release build there is no console, so the user just sees nothing happen.
 pub fn config_dir() -> PathBuf {
-    dirs::config_dir()
-        .expect("no config directory available on this platform")
-        .join("chat-studio")
+    static DIR: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+    DIR.get_or_init(|| {
+        if let Some(dir) = dirs::config_dir() {
+            return dir.join("chat-studio");
+        }
+        if let Some(local) = std::env::var_os("LOCALAPPDATA") {
+            return PathBuf::from(local).join("chat-studio");
+        }
+        // Last resort: sit next to the executable. Never ideal, but it keeps
+        // the app usable instead of refusing to launch.
+        std::env::current_exe()
+            .ok()
+            .and_then(|exe| exe.parent().map(|p| p.join("chat-studio")))
+            .unwrap_or_else(|| PathBuf::from("chat-studio"))
+    })
+    .clone()
+}
+
+pub fn log_dir() -> PathBuf {
+    config_dir().join("logs")
 }
 
 fn settings_path() -> PathBuf {
     config_dir().join("settings.toml")
 }
 
-pub fn load_settings() -> anyhow::Result<Settings> {
+/// Moves an unreadable `settings.toml` aside so the app can start on defaults
+/// without destroying whatever the user had. Returns the backup path for the
+/// warning shown to them.
+pub fn quarantine_settings_file() -> Option<PathBuf> {
+    let path = settings_path();
+    if !path.exists() {
+        return None;
+    }
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let backup = path.with_extension(format!("toml.bad.{stamp}"));
+    match std::fs::rename(&path, &backup) {
+        Ok(()) => Some(backup),
+        Err(e) => {
+            tracing::error!(error = %e, "could not quarantine settings file");
+            None
+        }
+    }
+}
+
+#[derive(thiserror::Error, Debug)]
+pub enum ConfigError {
+    #[error("io error: {0}")]
+    Io(#[from] std::io::Error),
+    #[error("invalid settings format: {0}")]
+    Parse(#[from] toml::de::Error),
+    #[error("could not serialize settings: {0}")]
+    Serialize(#[from] toml::ser::Error),
+}
+
+pub fn load_settings() -> Result<Settings, ConfigError> {
     let path = settings_path();
     if !path.exists() {
         let settings = Settings::default();
@@ -308,13 +392,16 @@ pub fn load_settings() -> anyhow::Result<Settings> {
         let migrated = migrate_theme_id(&settings.theme, &raw);
         if !migrated.is_empty() {
             settings.theme_id = migrated;
-            let _ = save_settings(&settings);
+            if let Err(e) = save_settings(&settings) {
+                // Non-fatal: the migration is recomputed on next launch.
+                tracing::warn!(error = %e, "could not persist migrated theme_id");
+            }
         }
     }
     Ok(settings)
 }
 
-pub fn save_settings(settings: &Settings) -> anyhow::Result<()> {
+pub fn save_settings(settings: &Settings) -> Result<(), ConfigError> {
     let dir = config_dir();
     std::fs::create_dir_all(&dir)?;
     let path = settings_path();

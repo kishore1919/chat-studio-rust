@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { CheckIcon, ChevronDownIcon, ChevronRightIcon, CopyIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { useCopyFeedback } from '../lib/useCopyFeedback'
 
 export interface ParsedToolCall {
   id: string
@@ -15,16 +16,13 @@ interface ToolCallCardProps {
 
 export function ToolCallCard({ toolCall }: ToolCallCardProps) {
   const [expanded, setExpanded] = useState(false)
-  const [copied, setCopied] = useState(false)
+  const [copied, copy] = useCopyFeedback(2000)
 
   const mainParam = toolCall.params.command || toolCall.params.description || Object.values(toolCall.params)[0] || ''
 
   const handleCopy = (e: React.MouseEvent) => {
     e.stopPropagation()
-    const content = toolCall.params.command || JSON.stringify(toolCall.params, null, 2)
-    navigator.clipboard.writeText(content)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+    copy(toolCall.params.command || JSON.stringify(toolCall.params, null, 2))
   }
 
   return (
@@ -107,7 +105,10 @@ export function extractToolCalls(rawText: string): { toolCalls: ParsedToolCall[]
     }
 
     toolCalls.push({
-      id: Math.random().toString(36).slice(2),
+      // Position + name, not Math.random(): these ids are React keys, so a
+      // random one made every re-parse of the message remount the card and
+      // discard its expanded state. Position is stable for a given body.
+      id: `${toolCalls.length}-${fnName}`,
       name: fnName,
       params,
       raw: match,
@@ -133,7 +134,7 @@ export function extractToolCalls(rawText: string): { toolCalls: ParsedToolCall[]
     }
 
     toolCalls.push({
-      id: Math.random().toString(36).slice(2),
+      id: `${toolCalls.length}-${fnName}`,
       name: fnName,
       params,
       raw: match,

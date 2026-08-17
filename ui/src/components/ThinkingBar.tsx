@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { CheckIcon, ChevronDownIcon, ChevronRightIcon, CopyIcon } from 'lucide-react'
+import { useCopyFeedback } from '../lib/useCopyFeedback'
 
 interface ThinkingBarProps {
   reasoning: string
@@ -15,16 +16,12 @@ function formatDuration(ms: number | null | undefined) {
 
 export function ThinkingBar({ reasoning, isStreaming = false, durationMs }: ThinkingBarProps) {
   const [open, setOpen] = useState(true)
-  const [copied, setCopied] = useState(false)
+  const [copied, copy] = useCopyFeedback()
   const duration = formatDuration(durationMs)
 
   if (!reasoning && !isStreaming) return null
 
-  const handleCopy = async () => {
-    await navigator.clipboard.writeText(reasoning)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 1500)
-  }
+  const handleCopy = () => copy(reasoning)
 
   return (
     <div className="my-2 overflow-hidden rounded-md border border-border/40 bg-muted/30 text-xs">
@@ -36,7 +33,7 @@ export function ThinkingBar({ reasoning, isStreaming = false, durationMs }: Thin
         <div className="flex items-center gap-2 font-medium">
           {isStreaming ? (
             <span className="flex items-center gap-1.5 text-primary">
-              <span className="size-1.5 animate-ping rounded-full bg-primary" />
+              <span aria-hidden="true" className="size-1.5 animate-ping rounded-full bg-primary" />
               <span>Thinking...</span>
             </span>
           ) : (

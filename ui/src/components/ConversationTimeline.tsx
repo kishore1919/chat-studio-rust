@@ -12,8 +12,11 @@ const MAX_TICKS = 16
 export function ConversationTimeline({
   messages,
   onScrollToMessage,
+  activeMessageId,
 }: ConversationTimelineProps) {
-  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null)
+  // Keyboard-focus only, not mouse hover - the hover preview popup and the
+  // tick-grows-on-hover effect were removed per feedback.
+  const [focusedIndex, setFocusedIndex] = useState<number | null>(null)
 
   // Extract all user input messages
   const userMessages = useMemo(() => messages.filter((m) => m.role === 'user'), [messages])
@@ -44,32 +47,27 @@ export function ConversationTimeline({
   if (totalCount === 0) return null
 
   return (
-    <div className="absolute right-6 top-1/2 -translate-y-1/2 z-40 flex flex-col items-end gap-1.5 select-none pointer-events-auto">
+    <nav
+      aria-label="Conversation timeline"
+      className="absolute right-2 top-1/2 z-40 flex -translate-y-1/2 flex-col items-end gap-1.5 rounded-full border border-border/60 bg-card/60 py-2 pl-1 pr-1.5 backdrop-blur select-none pointer-events-auto"
+    >
       {sampledTicks.map((item, index) => {
-        const isHovered = hoveredIndex === index
+        const isFocused = focusedIndex === index
+        const isActive = item.msg.id === activeMessageId
         const promptText = item.msg.content.trim()
 
         return (
-          <div
-            key={item.key}
-            className="relative flex items-center justify-end"
-            onMouseEnter={() => setHoveredIndex(index)}
-            onMouseLeave={() => setHoveredIndex(null)}
-          >
-            {/* Floating Preview Card */}
-            {isHovered && (
+          <div key={item.key} className="relative flex items-center justify-end">
+            {/* Preview card shown on keyboard focus only. */}
+            {isFocused && (
               <div
-                onMouseDown={(e) => {
-                  e.preventDefault()
-                  e.stopPropagation()
-                  onScrollToMessage(item.msg.id)
-                }}
-                className="absolute right-8 top-1/2 -translate-y-1/2 z-50 w-60 rounded-xl border border-border/90 bg-[#1b1c24]/98 p-2.5 text-left shadow-2xl backdrop-blur-xl transition-all animate-in fade-in zoom-in-95 cursor-pointer pointer-events-auto"
+                onClick={() => onScrollToMessage(item.msg.id)}
+                className="absolute right-8 top-1/2 -translate-y-1/2 z-50 w-60 rounded-xl border border-border/90 bg-popover/98 p-2.5 text-left shadow-2xl backdrop-blur-xl transition-all animate-in fade-in zoom-in-95 cursor-pointer pointer-events-auto"
               >
-                <div className="font-semibold text-[12px] text-white line-clamp-3 leading-snug whitespace-pre-wrap break-words">
+                <div className="font-semibold text-[12px] text-popover-foreground line-clamp-3 leading-snug whitespace-pre-wrap break-words">
                   {promptText}
                 </div>
-                <div className="mt-1.5 flex items-center justify-between font-mono text-[9px] text-neutral-400">
+                <div className="mt-1.5 flex items-center justify-between font-mono text-[9px] text-muted-foreground">
                   <span>Input #{item.displayNumber} of {totalCount}</span>
                   <span className="text-primary/90 font-medium">Jump ↵</span>
                 </div>
@@ -79,24 +77,21 @@ export function ConversationTimeline({
             <button
               type="button"
               aria-label={`Jump to message ${item.displayNumber} of ${totalCount}`}
-              onMouseDown={(e) => {
-                e.preventDefault()
-                e.stopPropagation()
-                onScrollToMessage(item.msg.id)
-              }}
-              className="group/btn flex h-3 w-6 cursor-pointer items-center justify-end pr-0.5"
+              aria-current={isActive ? 'true' : undefined}
+              onClick={() => onScrollToMessage(item.msg.id)}
+              onFocus={() => setFocusedIndex(index)}
+              onBlur={() => setFocusedIndex(null)}
+              className="flex h-3 w-6 cursor-pointer items-center justify-end pr-0.5"
             >
               <span
-                className={`block rounded-full transition-all duration-150 ${
-                  isHovered
-                    ? 'h-[2px] w-4.5 bg-white shadow-sm'
-                    : 'h-[1.5px] w-2.5 bg-neutral-500/70 group-hover/btn:w-4 group-hover/btn:bg-white'
+                className={`block rounded-full transition-colors duration-150 ${
+                  isActive ? 'h-[2px] w-4.5 bg-foreground shadow-sm' : 'h-[1.5px] w-2.5 bg-muted-foreground/70'
                 }`}
               />
             </button>
           </div>
         )
       })}
-    </div>
+    </nav>
   )
 }

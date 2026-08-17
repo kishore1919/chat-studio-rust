@@ -2,12 +2,14 @@ import { invoke } from '@tauri-apps/api/core'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import type {
   Conversation,
+  Diagnostics,
   Message,
   ModelInfo,
   ProviderConfig,
   ProviderTestResult,
   Settings,
   StreamEvent,
+  StreamHandle,
 } from './types'
 
 // Typed wrappers over the #[tauri::command] surface in src-tauri/src/commands.rs.
@@ -37,11 +39,29 @@ export const ipc = {
   setConversationModel: (conversationId: number, provider: string, model: string) =>
     invoke<void>('set_conversation_model', { conversationId, provider, model }),
 
-  sendMessage: (conversationId: number, text: string, reasoningEffort?: string | null) =>
-    invoke<string>('send_message', { conversationId, text, reasoningEffort: reasoningEffort ?? null }),
+  setConversationSystemPrompt: (conversationId: number, systemPrompt: string | null) =>
+    invoke<void>('set_conversation_system_prompt', { conversationId, systemPrompt }),
 
-  retryMessage: (conversationId: number, messageId: number, reasoningEffort?: string | null) =>
-    invoke<string>('retry_message', { conversationId, messageId, reasoningEffort: reasoningEffort ?? null }),
+  sendMessage: (conversationId: number, text: string, reasoningEffort: string | null | undefined, streamId: string) =>
+    invoke<StreamHandle>('send_message', {
+      conversationId,
+      text,
+      reasoningEffort: reasoningEffort ?? null,
+      streamId,
+    }),
+
+  retryMessage: (
+    conversationId: number,
+    messageId: number,
+    reasoningEffort: string | null | undefined,
+    streamId: string,
+  ) =>
+    invoke<StreamHandle>('retry_message', {
+      conversationId,
+      messageId,
+      reasoningEffort: reasoningEffort ?? null,
+      streamId,
+    }),
 
   cancelStream: (streamId: string) => invoke<void>('cancel_stream', { streamId }),
 
@@ -52,13 +72,15 @@ export const ipc = {
     conversationId: number,
     messageId: number,
     content: string,
-    reasoningEffort?: string | null,
+    reasoningEffort: string | null | undefined,
+    streamId: string,
   ) =>
-    invoke<string>('edit_and_resend_message', {
+    invoke<StreamHandle>('edit_and_resend_message', {
       conversationId,
       messageId,
       content,
       reasoningEffort: reasoningEffort ?? null,
+      streamId,
     }),
 
   deleteMessage: (messageId: number) => invoke<void>('delete_message', { messageId }),
@@ -87,6 +109,10 @@ export const ipc = {
   listGlobalSkills: () => invoke<import('./types').Skill[]>('list_global_skills'),
 
   openConfigDir: () => invoke<void>('open_config_dir'),
+
+  openLogDir: () => invoke<void>('open_log_dir'),
+
+  getDiagnostics: () => invoke<Diagnostics>('get_diagnostics'),
 }
 
 /** Subscribes to the coalesced delta stream for one in-flight message. */
