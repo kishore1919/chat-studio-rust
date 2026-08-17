@@ -883,6 +883,18 @@ pub async fn list_global_skills() -> Result<Vec<crate::config::Skill>, String> {
     Ok(crate::skills::discover_global_skills())
 }
 
+#[tauri::command]
+pub fn set_window_theme(app: AppHandle, theme_type: String) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window("main") {
+        let theme = match theme_type.to_lowercase().as_str() {
+            "light" => tauri::Theme::Light,
+            _ => tauri::Theme::Dark,
+        };
+        window.set_theme(Some(theme)).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

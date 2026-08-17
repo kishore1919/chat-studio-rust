@@ -153,8 +153,8 @@ export function ChatHeader({
   }
 
   return (
-    <header className="flex h-12 shrink-0 items-center justify-between border-b border-border/40 px-3 select-none">
-      <div className="flex min-w-0 items-center gap-2">
+    <header data-tauri-drag-region className="flex h-12 shrink-0 items-center justify-between border-b border-border/40 px-3 select-none">
+      <div data-tauri-drag-region className="flex min-w-0 items-center gap-2">
         <Button
           variant="ghost"
           size="icon-sm"

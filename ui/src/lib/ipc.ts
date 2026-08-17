@@ -113,6 +113,7 @@ export const ipc = {
   openLogDir: () => invoke<void>('open_log_dir'),
 
   getDiagnostics: () => invoke<Diagnostics>('get_diagnostics'),
+  setWindowTheme: (themeType: string) => invoke<void>('set_window_theme', { themeType }),
 }
 
 /** Subscribes to the coalesced delta stream for one in-flight message. */

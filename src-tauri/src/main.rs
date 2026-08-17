@@ -134,6 +134,31 @@ fn main() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_window_state::Builder::default().build())
+        .setup(|app| {
+            if let Some(window) = app.get_webview_window("main") {
+                let state = app.state::<AppState>();
+                let theme = {
+                    let s = state.settings.lock().unwrap();
+                    match s.theme {
+                        config::ThemePreference::Light => Some(tauri::Theme::Light),
+                        config::ThemePreference::Dark => Some(tauri::Theme::Dark),
+                        config::ThemePreference::System => {
+                            if s.theme_id.starts_with("light") || s.theme_id == "solarized-light" {
+                                Some(tauri::Theme::Light)
+                            } else if s.theme_id.starts_with("dark") || s.theme_id.is_empty() {
+                                Some(tauri::Theme::Dark)
+                            } else {
+                                None
+                            }
+                        }
+                    }
+                };
+                if let Some(t) = theme {
+                    let _ = window.set_theme(Some(t));
+                }
+            }
+            Ok(())
+        })
         .manage(app_state)
         .invoke_handler(tauri::generate_handler![
             commands::list_conversations,
@@ -161,6 +186,7 @@ fn main() {
             commands::list_mcp_tools,
             commands::call_mcp_tool,
             commands::list_global_skills,
+            commands::set_window_theme,
             commands::open_config_dir,
             commands::open_log_dir,
             commands::get_diagnostics,

@@ -1,3 +1,4 @@
+import { ipc } from '../ipc'
 import type { AppTheme } from './types'
 
 const TOKEN_ID = 'app-theme-tokens'
@@ -29,6 +30,11 @@ export function applyTheme(
   opts?: { accent?: string | null; borderVisibility?: string; fontSize?: number },
 ) {
   document.documentElement.dataset.theme = theme.meta.type
+  try {
+    void ipc.setWindowTheme(theme.meta.type).catch(() => {})
+  } catch {
+    // Non-fatal if running outside Tauri / in a headless browser test
+  }
   const root = document.documentElement.style
 
   const vars = { ...theme.vars }
