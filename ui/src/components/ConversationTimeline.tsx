@@ -12,16 +12,17 @@ const MAX_TICKS = 16
 export function ConversationTimeline({
   messages,
   onScrollToMessage,
-  activeMessageId,
 }: ConversationTimelineProps) {
-  // Keyboard-focus only, not mouse hover - the hover preview popup and the
-  // tick-grows-on-hover effect were removed per feedback.
-  const [focusedIndex, setFocusedIndex] = useState<number | null>(null)
+  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null)
 
   // Extract all user input messages
-  const userMessages = useMemo(() => messages.filter((m) => m.role === 'user'), [messages])
+  const userMessages = useMemo(() => {
+    return messages.filter((m) => m.role === 'user')
+  }, [messages])
+
   const totalCount = userMessages.length
 
+  // If there are many messages, sample evenly so the timeline widget ALWAYS stays compact (~160px tall)
   const sampledTicks = useMemo(() => {
     if (totalCount === 0) return []
     if (totalCount <= MAX_TICKS) {
@@ -31,14 +32,20 @@ export function ConversationTimeline({
         key: msg.id,
       }))
     }
+
     const result: Array<{ msg: Message; displayNumber: number; key: number }> = []
     const step = (totalCount - 1) / (MAX_TICKS - 1)
-    const used = new Set<number>()
+    const usedIndices = new Set<number>()
+
     for (let i = 0; i < MAX_TICKS; i++) {
       const idx = Math.min(Math.round(i * step), totalCount - 1)
-      if (!used.has(idx)) {
-        used.add(idx)
-        result.push({ msg: userMessages[idx], displayNumber: idx + 1, key: userMessages[idx].id })
+      if (!usedIndices.has(idx)) {
+        usedIndices.add(idx)
+        result.push({
+          msg: userMessages[idx],
+          displayNumber: idx + 1,
+          key: userMessages[idx].id,
+        })
       }
     }
     return result
@@ -47,21 +54,26 @@ export function ConversationTimeline({
   if (totalCount === 0) return null
 
   return (
-    <nav
-      aria-label="Conversation timeline"
-      className="absolute right-2 top-1/2 z-40 flex -translate-y-1/2 flex-col items-end gap-1.5 rounded-full border border-border/60 bg-card/60 py-2 pl-1 pr-1.5 backdrop-blur select-none pointer-events-auto"
-    >
+    <div className="absolute right-6 top-1/2 -translate-y-1/2 z-40 flex flex-col items-end gap-1.5 select-none pointer-events-auto">
       {sampledTicks.map((item, index) => {
-        const isFocused = focusedIndex === index
-        const isActive = item.msg.id === activeMessageId
+        const isHovered = hoveredIndex === index
         const promptText = item.msg.content.trim()
 
         return (
-          <div key={item.key} className="relative flex items-center justify-end">
-            {/* Preview card shown on keyboard focus only. */}
-            {isFocused && (
+          <div
+            key={item.key}
+            className="relative flex items-center justify-end"
+            onMouseEnter={() => setHoveredIndex(index)}
+            onMouseLeave={() => setHoveredIndex(null)}
+          >
+            {/* Floating Preview Card */}
+            {isHovered && (
               <div
-                onClick={() => onScrollToMessage(item.msg.id)}
+                onMouseDown={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  onScrollToMessage(item.msg.id)
+                }}
                 className="absolute right-8 top-1/2 -translate-y-1/2 z-50 w-60 rounded-xl border border-border/90 bg-popover/98 p-2.5 text-left shadow-2xl backdrop-blur-xl transition-all animate-in fade-in zoom-in-95 cursor-pointer pointer-events-auto"
               >
                 <div className="font-semibold text-[12px] text-popover-foreground line-clamp-3 leading-snug whitespace-pre-wrap break-words">
@@ -74,24 +86,28 @@ export function ConversationTimeline({
               </div>
             )}
 
+            {/* Clickable Dash Button */}
             <button
               type="button"
               aria-label={`Jump to message ${item.displayNumber} of ${totalCount}`}
-              aria-current={isActive ? 'true' : undefined}
-              onClick={() => onScrollToMessage(item.msg.id)}
-              onFocus={() => setFocusedIndex(index)}
-              onBlur={() => setFocusedIndex(null)}
-              className="flex h-3 w-6 cursor-pointer items-center justify-end pr-0.5"
+              onMouseDown={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                onScrollToMessage(item.msg.id)
+              }}
+              className="group/btn flex h-3 w-6 cursor-pointer items-center justify-end pr-0.5"
             >
               <span
-                className={`block rounded-full transition-colors duration-150 ${
-                  isActive ? 'h-[2px] w-4.5 bg-foreground shadow-sm' : 'h-[1.5px] w-2.5 bg-muted-foreground/70'
+                className={`block rounded-full transition-all duration-150 ${
+                  isHovered
+                    ? 'h-[2px] w-4.5 bg-foreground shadow-sm'
+                    : 'h-[1.5px] w-2.5 bg-muted-foreground/70 group-hover/btn:w-4 group-hover/btn:bg-foreground'
                 }`}
               />
             </button>
           </div>
         )
       })}
-    </nav>
+    </div>
   )
 }
