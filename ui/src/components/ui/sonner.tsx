@@ -3,11 +3,11 @@ import { Toaster as Sonner, type ToasterProps } from 'sonner'
 import { useThemeStore } from '@/store/theme'
 
 function Toaster({ ...props }: ToasterProps) {
-  const theme = useThemeStore((s) => s.resolved)
+  const theme = useThemeStore((s) => (s.resolved?.meta.type === 'light' ? 'light' : 'dark'))
 
   return (
     <Sonner
-      theme={theme}
+      theme={theme as 'light' | 'dark'}
       className="toaster group"
       style={
         {

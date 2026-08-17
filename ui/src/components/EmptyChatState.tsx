@@ -26,28 +26,33 @@ export function EmptyChatState() {
   const active = conversations.find((c) => c.id === activeConversationId)
 
   return (
-    <div className="flex flex-1 flex-col items-center justify-center p-6 text-center">
-      <h2 className="text-xl font-semibold tracking-tight text-foreground">
-        Chat Studio
-      </h2>
-      <p className="mt-1 max-w-md text-sm text-muted-foreground">
+    <div className="relative flex flex-1 flex-col items-center justify-center overflow-hidden p-6 text-center">
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -top-16 left-1/2 h-64 w-[520px] -translate-x-1/2 rounded-full bg-primary/10 blur-3xl"
+      />
+      <h2 className="relative text-xl font-semibold tracking-tight text-foreground">Chat Studio</h2>
+      <p className="relative mt-1 max-w-md text-sm text-muted-foreground">
         {active?.model
           ? `Ready with ${active.model}. Start typing or choose a prompt.`
           : 'Ready. Start typing below or choose a prompt.'}
       </p>
 
-      <div className="mt-6 grid w-full max-w-lg grid-cols-1 gap-2.5 sm:grid-cols-2 text-left">
+      <div className="relative mt-6 grid w-full max-w-lg grid-cols-1 gap-2.5 text-left sm:grid-cols-2">
         {STARTER_PROMPTS.map((item) => (
           <button
             key={item.title}
             type="button"
             onClick={() => sendMessage(item.prompt)}
-            className="flex flex-col items-start gap-1 rounded-lg border border-border/80 bg-card p-3 text-left transition-colors hover:border-border hover:bg-accent/50 cursor-pointer min-w-0"
+            className="group flex min-w-0 cursor-pointer flex-col items-start gap-1 rounded-lg border border-border/80 bg-card p-3 text-left transition-colors hover:border-primary/20 hover:bg-accent/50"
           >
-            <div className="font-medium text-xs text-foreground w-full truncate">
-              {item.title}
+            <div className="flex w-full items-center justify-between gap-2">
+              <span className="truncate text-xs font-medium text-foreground">{item.title}</span>
+              <span className="shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-60">
+                ›
+              </span>
             </div>
-            <div className="text-[11px] text-muted-foreground leading-relaxed whitespace-normal break-words w-full">
+            <div className="w-full break-words text-[11px] leading-relaxed whitespace-normal text-muted-foreground">
               {item.prompt}
             </div>
           </button>

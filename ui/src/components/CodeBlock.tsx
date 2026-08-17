@@ -38,15 +38,16 @@ export function CodeBlock({ className, children }: CodeBlockProps) {
   }
 
   return (
-    <div className="group relative my-3 overflow-hidden rounded-xl border border-border/80 bg-[var(--code-bg)] text-foreground shadow-xs">
-      <div className="flex items-center justify-between border-b border-border/60 bg-muted/40 px-3 py-1.5 text-xs text-muted-foreground select-none">
+    <div className="group relative my-3 overflow-hidden rounded-xl border border-border/40 bg-[var(--code-bg)] text-foreground shadow-xs">
+      <div className="flex items-center justify-between border-b border-border/30 bg-muted/40 px-3 py-1.5 text-xs text-muted-foreground select-none">
         <span className="font-mono text-[11px] font-semibold lowercase text-primary/90">
           {language}
         </span>
         <button
           type="button"
           onClick={handleCopy}
-          className="flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-medium transition-colors hover:bg-muted text-muted-foreground hover:text-foreground cursor-pointer"
+          aria-label={copied ? 'Copied' : 'Copy code'}
+          className="flex cursor-pointer items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
           title="Copy code"
         >
           {copied ? (

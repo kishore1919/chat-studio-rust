@@ -1,7 +1,6 @@
 import { create } from 'zustand'
 import { ipc } from '../lib/ipc'
 import type { ModelInfo, ProviderConfig, Settings } from '../lib/types'
-import { useThemeStore } from './theme'
 
 interface SettingsState {
   settings: Settings | null
@@ -24,9 +23,8 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     set({ loading: true })
     const settings = await ipc.getSettings()
     set({ settings, loading: false })
-    // Backend is the source of truth for a user-chosen theme override;
-    // reconcile it into the store that already painted from localStorage.
-    useThemeStore.getState().setPreference(settings.theme)
+    const { syncThemeFromSettings } = await import('./theme')
+    syncThemeFromSettings(settings.theme_id, settings.accent ?? null, settings.border_visibility || 'subtle')
   },
 
   save: async (next) => {

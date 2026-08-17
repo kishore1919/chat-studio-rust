@@ -69,9 +69,9 @@ export function MindMapPanel({ onClose, onSelectMessage }: MindMapPanelProps) {
   const handleResetZoom = () => setZoom(1)
 
   return (
-    <aside className="flex h-full w-80 flex-col border-l border-border bg-card/60 backdrop-blur-md select-none">
+    <aside className="flex h-full w-80 flex-col border-l border-border/40 bg-card/60 backdrop-blur-md select-none">
       {/* Header */}
-      <div className="flex h-12 shrink-0 items-center justify-between border-b border-border px-3">
+      <div className="flex h-12 shrink-0 items-center justify-between border-b border-border/40 px-3">
         <div className="flex items-center gap-1.5 font-semibold text-xs text-foreground">
           <GitBranchIcon className="size-4 text-primary shrink-0" />
           <span>Input Mind Map</span>

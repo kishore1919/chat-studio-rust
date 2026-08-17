@@ -31,6 +31,7 @@ export function MessageList({ conversationId, targetMessageId }: MessageListProp
 
   const isStreamingHere = streaming?.conversationId === conversationId
   const [activeMessageId, setActiveMessageId] = useState<number | null>(null)
+  const [atBottom, setAtBottom] = useState(true)
 
   useEffect(() => {
     // Reset scroll position when switching conversations.
@@ -75,7 +76,9 @@ export function MessageList({ conversationId, targetMessageId }: MessageListProp
         ref={virtuosoRef}
         className="flex-1"
         data={messages}
+        increaseViewportBy={200}
         followOutput={isStreamingHere ? 'smooth' : false}
+        atBottomStateChange={setAtBottom}
         startReached={() => {
           if (hasMore) loadOlderMessages(conversationId)
         }}
@@ -88,6 +91,16 @@ export function MessageList({ conversationId, targetMessageId }: MessageListProp
           Footer: () => (isStreamingHere ? <StreamingBubble /> : null),
         }}
       />
+      {!atBottom && !isStreamingHere && messages.length > 4 && (
+        <button
+          type="button"
+          onClick={() => virtuosoRef.current?.scrollToIndex({ index: messages.length - 1, behavior: 'smooth' })}
+          aria-label="Scroll to bottom"
+          className="absolute bottom-4 left-1/2 z-10 -translate-x-1/2 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium shadow-md transition hover:bg-accent"
+        >
+          Jump to latest ↓
+        </button>
+      )}
       <ConversationTimeline
         messages={messages}
         activeMessageId={activeMessageId}

@@ -29,6 +29,7 @@ export function Composer() {
   const [text, setText] = useState('')
   const [menuIndex, setMenuIndex] = useState(0)
   const [thinkingMode, setThinkingMode] = useState<ThinkingMode>('auto')
+  const [dragOver, setDragOver] = useState(false)
   const sendMessage = useChatStore((s) => s.sendMessage)
   const cancelStream = useChatStore((s) => s.cancelStream)
   const clearConversation = useChatStore((s) => s.clearConversation)
@@ -156,10 +157,27 @@ export function Composer() {
   }
 
   return (
-    <div className="relative border-t border-border p-3">
-      {/* Floating Slash Command Autocomplete Menu */}
-      {showCommandMenu && (
-        <div className="absolute bottom-full left-3 z-30 mb-2 w-64 overflow-hidden rounded-lg border border-border bg-popover p-1 shadow-md">
+    <div
+      className={cn(
+        'relative border-t p-3 transition-colors',
+        dragOver ? 'border-primary/60 bg-accent/20' : 'border-border/40',
+      )}
+      onDragOver={(e) => {
+        e.preventDefault()
+        setDragOver(true)
+      }}
+      onDragLeave={() => setDragOver(false)}
+      onDrop={(e) => {
+        e.preventDefault()
+        setDragOver(false)
+      }}
+    >
+      {showCommandMenu ? (
+        <div
+          role="listbox"
+          aria-label="Commands"
+          className="absolute bottom-full left-3 z-30 mb-2 w-64 overflow-hidden rounded-lg border border-border bg-popover p-1 shadow-md"
+        >
           <div className="px-2 py-1 text-[10px] font-medium tracking-wider text-muted-foreground uppercase">
             Commands
           </div>
@@ -169,10 +187,14 @@ export function Composer() {
               <button
                 key={cmd.key}
                 type="button"
+                role="option"
+                aria-selected={isSelected}
                 onClick={() => cmd.action({ text, setText })}
                 className={cn(
                   'flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-xs transition-colors',
-                  isSelected ? 'bg-accent text-accent-foreground font-medium' : 'hover:bg-muted text-foreground',
+                  isSelected
+                    ? 'bg-accent font-medium text-accent-foreground'
+                    : 'text-foreground hover:bg-muted',
                 )}
               >
                 <span className="font-mono">{cmd.label}</span>
@@ -181,10 +203,18 @@ export function Composer() {
             )
           })}
         </div>
-      )}
+      ) : isCommandTriggered ? (
+        <div className="absolute bottom-full left-3 z-30 mb-2 rounded-lg border border-border bg-popover px-3 py-2 text-xs text-muted-foreground shadow-md">
+          No commands match &quot;{commandQuery}&quot;
+        </div>
+      ) : null}
 
-      {/* Single Unified Input Bar */}
-      <div className="flex items-end gap-2 rounded-2xl border border-border bg-card px-3 py-2 shadow-xs transition-colors focus-within:border-primary/50">
+      <div
+        className={cn(
+          'flex items-end gap-2 rounded-2xl border bg-card px-3 py-2 shadow-xs transition-colors focus-within:ring-1 focus-within:ring-primary/20',
+          dragOver ? 'border-primary/40' : 'border-border/60',
+        )}
+      >
         <Textarea
           ref={textareaRef}
           value={text}
@@ -198,13 +228,13 @@ export function Composer() {
           )}
         />
 
-        {/* Thinking Mode Icon Dropdown */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button
               type="button"
+              aria-label={`Thinking mode: ${thinkingLabels[thinkingMode]}`}
               className={cn(
-                'flex size-8 shrink-0 items-center justify-center rounded-full transition-colors cursor-pointer',
+                'flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full transition-colors',
                 thinkingMode === 'on'
                   ? 'bg-primary/20 text-primary'
                   : thinkingMode === 'off'
@@ -238,12 +268,12 @@ export function Composer() {
           </DropdownMenuContent>
         </DropdownMenu>
 
-        {/* Send / Stop Button */}
         {isStreaming ? (
           <Button
             onClick={cancelStream}
             size="icon"
             variant="destructive"
+            aria-label="Stop generating"
             className="size-8 shrink-0 rounded-full"
             title="Stop (Esc)"
           >
@@ -254,6 +284,7 @@ export function Composer() {
             onClick={handleSend}
             disabled={!text.trim()}
             size="icon"
+            aria-label={text.trim() ? 'Send message' : 'Type a message to send'}
             className="size-8 shrink-0 rounded-full"
             title="Send (Enter)"
           >

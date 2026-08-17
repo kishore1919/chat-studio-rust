@@ -38,7 +38,7 @@ export function Chat({ onOpenSettings }: ChatProps) {
   }
 
   return (
-    <div className="flex h-full w-full overflow-hidden bg-background">
+    <div className="flex h-full w-full min-w-[720px] overflow-hidden bg-background">
       <Sidebar collapsed={sidebarCollapsed} />
       <div className="relative flex min-w-0 flex-1 flex-col overflow-hidden">
         <ChatHeader

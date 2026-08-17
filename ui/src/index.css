@@ -24,8 +24,9 @@
   --bg-sidebar: #fafafa;
   --bg-hover: #f0f0f1;
   --border: #e5e4e7;
+  --border-strong: #d8d7da;
   --text: #16171d;
-  --text-muted: #6b6375;
+  --text-muted: #6e6a78;
   --accent: #aa3bff;
   --accent-bg: rgba(170, 59, 255, 0.1);
   --bubble-user: #efe7ff;
@@ -33,6 +34,8 @@
   --code-bg: #f4f3ec;
   --danger: #dc2626;
   --success: #16a34a;
+  --shadow-xs: 0 1px 2px rgba(16, 16, 24, 0.06);
+  --shadow-sm: 0 2px 8px rgba(16, 16, 24, 0.08);
 
   --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
   --mono: ui-monospace, Consolas, 'SFMono-Regular', monospace;
@@ -66,6 +69,7 @@
   --bg-sidebar: #1a1b21;
   --bg-hover: #24252d;
   --border: #2e303a;
+  --border-strong: #3a3c49;
   --text: #f3f4f6;
   --text-muted: #9ca3af;
   --accent: #c084fc;
@@ -75,6 +79,8 @@
   --code-bg: #1f2028;
   --danger: #f87171;
   --success: #4ade80;
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --shadow-sm: 0 4px 16px rgba(0, 0, 0, 0.45);
 
   color-scheme: dark;
 
@@ -219,6 +225,34 @@ pre {
 
 pre code.hljs {
   padding: 0 !important;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 

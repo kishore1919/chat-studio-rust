@@ -105,14 +105,16 @@ function ConversationRow({
 }: ConversationRowProps) {
   return (
     <div
+      role="option"
+      aria-selected={active || isSelected}
       onClick={isSelectMode ? onToggleSelect : onSelect}
       className={cn(
-        'group flex cursor-pointer items-start justify-between rounded-lg px-2.5 py-2 text-[13px] transition-colors',
+        'group flex cursor-pointer items-start justify-between rounded-lg border px-2.5 py-2 text-[13px] transition-colors',
         isSelected
-          ? 'bg-primary/15 font-medium text-foreground'
+          ? 'border-primary/20 bg-primary/10 font-medium text-foreground'
           : active
-            ? 'bg-accent font-medium text-foreground'
-            : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground',
+            ? 'border-border/40 bg-accent font-medium text-foreground shadow-xs'
+            : 'border-transparent text-muted-foreground hover:border-border/30 hover:bg-accent/50 hover:text-foreground',
       )}
     >
       <div className="flex min-w-0 flex-1 items-start gap-2">
@@ -299,15 +301,15 @@ export function Sidebar({ collapsed }: SidebarProps) {
 
   return (
     <>
-      {/* Subtle edge hover trigger strip when collapsed */}
       {collapsed && (
         <div
           onMouseEnter={handleMouseEnter}
-          className="fixed top-0 bottom-0 left-0 z-30 w-3.5 group cursor-pointer"
+          className="group fixed top-0 bottom-0 left-0 z-30 w-12 cursor-pointer"
           title="Hover to view chats"
+          aria-label="Show sidebar"
         >
-          <div className="flex h-full w-1 items-center justify-center bg-border/20 group-hover:bg-primary/60 transition-colors">
-            <ChevronRightIcon className="size-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity -ml-0.5" />
+          <div className="flex h-full w-1 items-center justify-center bg-border/20 transition-colors group-hover:bg-primary/60">
+            <ChevronRightIcon className="-ml-0.5 size-3 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
           </div>
         </div>
       )}
@@ -317,15 +319,15 @@ export function Sidebar({ collapsed }: SidebarProps) {
         onMouseEnter={collapsed ? handleMouseEnter : undefined}
         onMouseLeave={collapsed ? handleMouseLeave : undefined}
         className={cn(
-          'flex flex-col border-r border-border bg-sidebar select-none transition-all duration-200 ease-out',
+          'flex flex-col border-r border-border/40 bg-sidebar select-none transition-all duration-200 ease-[cubic-bezier(.16,1,.3,1)]',
           collapsed
             ? cn(
-                'fixed top-0 bottom-0 left-0 z-40 w-64 shadow-2xl',
+                'fixed top-0 bottom-0 left-0 z-40 w-[272px] shadow-2xl',
                 isHovered
                   ? 'translate-x-0 opacity-100 pointer-events-auto'
                   : '-translate-x-full opacity-0 pointer-events-none',
               )
-            : 'relative w-64 shrink-0',
+            : 'relative w-[272px] shrink-0',
         )}
       >
         {/* Top Search & Multi-Select Bar */}
@@ -337,13 +339,15 @@ export function Sidebar({ collapsed }: SidebarProps) {
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search chats..."
+                aria-label="Search chats"
                 className="h-8 pl-7 pr-7 text-xs"
               />
               {search && (
                 <button
                   type="button"
                   onClick={() => setSearch('')}
-                  className="absolute top-1/2 right-2 -translate-y-1/2 text-muted-foreground hover:text-foreground cursor-pointer"
+                  aria-label="Clear search"
+                  className="absolute top-1/2 right-2 -translate-y-1/2 cursor-pointer text-muted-foreground hover:text-foreground"
                 >
                   <XIcon className="size-3.5" />
                 </button>
@@ -394,11 +398,10 @@ export function Sidebar({ collapsed }: SidebarProps) {
           )}
         </div>
 
-        {/* Conversations List */}
-        <div className="flex-1 overflow-y-auto px-2">
+        <div role="listbox" aria-label="Conversations" className="flex-1 overflow-y-auto px-2">
           {grouped.map(([group, items]) => (
             <div key={group} className="mb-2">
-              <div className="px-3 pb-1 text-[11px] font-medium text-muted-foreground uppercase">
+              <div className="px-3 pb-1 text-[11px] font-medium tracking-wider text-muted-foreground uppercase">
                 {group}
               </div>
               {items.map((conv) => (
@@ -421,12 +424,17 @@ export function Sidebar({ collapsed }: SidebarProps) {
             </div>
           ))}
           {filtered.length === 0 && (
-            <p className="px-3 py-2 text-[13px] text-muted-foreground">No chats found.</p>
+            <div className="px-3 py-4 text-center">
+              <p className="text-[13px] text-muted-foreground">No chats found.</p>
+              <Button onClick={handleNewChat} variant="ghost" size="sm" className="mt-2 h-7 gap-1 text-xs">
+                <PlusIcon className="size-3.5" /> New chat
+              </Button>
+            </div>
           )}
         </div>
 
-        <Button onClick={handleNewChat} variant="outline" className="m-2">
-          <PlusIcon /> New chat
+        <Button onClick={handleNewChat} variant="outline" className="m-3 h-8 gap-1.5">
+          <PlusIcon className="size-4" /> New chat
         </Button>
 
         {/* Batch Delete Confirmation Modal */}

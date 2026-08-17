@@ -16,15 +16,11 @@ export function ConversationTimeline({
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null)
 
   // Extract all user input messages
-  const userMessages = useMemo(() => {
-    return messages.filter((m) => m.role === 'user')
-  }, [messages])
-
+  const userMessages = useMemo(() => messages.filter((m) => m.role === 'user'), [messages])
   const totalCount = userMessages.length
-  if (totalCount === 0) return null
 
-  // If there are many messages, sample evenly so the timeline widget ALWAYS stays compact (~160px tall)
   const sampledTicks = useMemo(() => {
+    if (totalCount === 0) return []
     if (totalCount <= MAX_TICKS) {
       return userMessages.map((msg, idx) => ({
         msg,
@@ -32,24 +28,20 @@ export function ConversationTimeline({
         key: msg.id,
       }))
     }
-
     const result: Array<{ msg: Message; displayNumber: number; key: number }> = []
     const step = (totalCount - 1) / (MAX_TICKS - 1)
-    const usedIndices = new Set<number>()
-
+    const used = new Set<number>()
     for (let i = 0; i < MAX_TICKS; i++) {
       const idx = Math.min(Math.round(i * step), totalCount - 1)
-      if (!usedIndices.has(idx)) {
-        usedIndices.add(idx)
-        result.push({
-          msg: userMessages[idx],
-          displayNumber: idx + 1,
-          key: userMessages[idx].id,
-        })
+      if (!used.has(idx)) {
+        used.add(idx)
+        result.push({ msg: userMessages[idx], displayNumber: idx + 1, key: userMessages[idx].id })
       }
     }
     return result
   }, [userMessages, totalCount])
+
+  if (totalCount === 0) return null
 
   return (
     <div className="absolute right-6 top-1/2 -translate-y-1/2 z-40 flex flex-col items-end gap-1.5 select-none pointer-events-auto">
@@ -84,15 +76,15 @@ export function ConversationTimeline({
               </div>
             )}
 
-            {/* Clickable Dash Button */}
             <button
               type="button"
+              aria-label={`Jump to message ${item.displayNumber} of ${totalCount}`}
               onMouseDown={(e) => {
                 e.preventDefault()
                 e.stopPropagation()
                 onScrollToMessage(item.msg.id)
               }}
-              className="flex h-3 w-6 items-center justify-end pr-0.5 cursor-pointer group/btn"
+              className="group/btn flex h-3 w-6 cursor-pointer items-center justify-end pr-0.5"
             >
               <span
                 className={`block rounded-full transition-all duration-150 ${

@@ -8,6 +8,7 @@ mod mcp;
 mod providers;
 mod skills;
 mod state;
+mod themes;
 
 use state::AppState;
 use std::collections::HashMap;
@@ -29,6 +30,7 @@ fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_fs::init())
         .manage(app_state)
         .invoke_handler(tauri::generate_handler![
             commands::list_conversations,
@@ -56,6 +58,11 @@ fn main() {
             commands::call_mcp_tool,
             commands::list_global_skills,
             commands::open_config_dir,
+            themes::list_themes,
+            themes::get_theme_content,
+            themes::import_theme_content,
+            themes::delete_custom_theme,
+            themes::open_themes_dir,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

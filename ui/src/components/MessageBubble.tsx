@@ -91,11 +91,12 @@ function MessageBubbleImpl({ message }: MessageBubbleProps) {
   }
 
   const actions = (
-    <div className="mt-1 flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+    <div className="mt-1 flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 focus-within:opacity-100">
       <Button
         variant="ghost"
         size="icon-sm"
         className="size-6 text-muted-foreground hover:text-foreground"
+        aria-label={copied ? 'Copied' : 'Copy message'}
         title="Copy"
         onClick={handleCopy}
       >
@@ -106,6 +107,7 @@ function MessageBubbleImpl({ message }: MessageBubbleProps) {
           variant="ghost"
           size="icon-sm"
           className="size-6 text-muted-foreground hover:text-foreground"
+          aria-label="Retry message"
           title="Retry / Regenerate"
           disabled={isStreaming}
           onClick={() => retryMessage(message)}
@@ -117,6 +119,7 @@ function MessageBubbleImpl({ message }: MessageBubbleProps) {
         variant="ghost"
         size="icon-sm"
         className="size-6 text-muted-foreground hover:text-foreground"
+        aria-label="Edit and resend"
         title="Edit & Resend"
         disabled={isStreaming}
         onClick={startEdit}
@@ -127,6 +130,7 @@ function MessageBubbleImpl({ message }: MessageBubbleProps) {
         variant="ghost"
         size="icon-sm"
         className="size-6 text-muted-foreground hover:text-destructive"
+        aria-label="Delete message"
         title="Delete"
         onClick={() => deleteMessage(message)}
       >
@@ -169,7 +173,7 @@ function MessageBubbleImpl({ message }: MessageBubbleProps) {
           {editing ? (
             editBox
           ) : (
-            <div className="rounded-2xl rounded-tr-xs bg-[var(--bubble-user)] px-4 py-2.5 text-[14px] leading-relaxed whitespace-pre-wrap break-words border border-primary/15 shadow-xs">
+            <div className="rounded-2xl rounded-tr-xs bg-[var(--bubble-user)] px-4 py-2.5 text-[14px] leading-relaxed whitespace-pre-wrap break-words border border-border/30 shadow-xs">
               {message.content}
             </div>
           )}
@@ -204,41 +208,39 @@ function MessageBubbleImpl({ message }: MessageBubbleProps) {
   }
 
   return (
-    <div className="group flex justify-start px-4 py-2">
-      <div className="max-w-[92%] min-w-0">
-        <div className="rounded-2xl rounded-tl-xs bg-[var(--bubble-assistant)] border border-border/70 px-4 py-3 shadow-xs">
-          <div className="mb-2 flex flex-wrap items-center gap-2 text-[12px]">
-            <span className="font-semibold text-foreground">Assistant</span>
-            {message.model && (
-              <span className="rounded-md bg-muted/80 px-1.5 py-0.5 text-[11px] font-mono text-muted-foreground">
-                {message.model}
-              </span>
-            )}
-            {duration && (
-              <button
-                type="button"
-                onClick={() => setExpanded((v) => !v)}
-                className="flex items-center gap-0.5 text-[11px] text-muted-foreground hover:text-foreground cursor-pointer transition-colors"
-              >
-                <span>Processed · {duration}</span>
-                {expanded ? <ChevronDownIcon className="size-3" /> : <ChevronRightIcon className="size-3" />}
-              </button>
-            )}
-          </div>
-
-          {expanded && (
-            <div className="mb-2 rounded-lg bg-muted/60 px-3 py-1.5 text-[11px] font-mono text-muted-foreground border border-border/40">
-              {message.tokens_in ?? '?'} in · {message.tokens_out ?? '?'} out · {duration}
-              {tokensPerSecond && ` · ${tokensPerSecond} tok/s`}
-            </div>
+    <div className="group flex justify-start px-4 py-3">
+      <div className="max-w-[92%] min-w-0 flex-1">
+        <div className="mb-1 flex flex-wrap items-center gap-2 text-[12px]">
+          <span className="font-semibold text-foreground">Assistant</span>
+          {message.model && (
+            <span className="rounded-md bg-muted/80 px-1.5 py-0.5 text-[11px] font-mono text-muted-foreground">
+              {message.model}
+            </span>
           )}
-
-          {reasoning && (
-            <ThinkingBar reasoning={reasoning} durationMs={message.duration_ms} />
+          {duration && (
+            <button
+              type="button"
+              onClick={() => setExpanded((v) => !v)}
+              className="flex items-center gap-0.5 text-[11px] text-muted-foreground hover:text-foreground cursor-pointer transition-colors"
+            >
+              <span>Processed · {duration}</span>
+              {expanded ? <ChevronDownIcon className="size-3" /> : <ChevronRightIcon className="size-3" />}
+            </button>
           )}
-
-          {editing ? editBox : renderAssistantContent()}
         </div>
+
+        {expanded && (
+          <div className="mb-2 rounded-lg bg-muted/60 px-3 py-1.5 text-[11px] font-mono text-muted-foreground border border-border/40">
+            {message.tokens_in ?? '?'} in · {message.tokens_out ?? '?'} out · {duration}
+            {tokensPerSecond && ` · ${tokensPerSecond} tok/s`}
+          </div>
+        )}
+
+        {reasoning && (
+          <ThinkingBar reasoning={reasoning} durationMs={message.duration_ms} />
+        )}
+
+        {editing ? editBox : renderAssistantContent()}
         <div className="flex justify-start">{!editing && actions}</div>
       </div>
     </div>

@@ -5,16 +5,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Chat Studio</title>
     <script>
-      // Runs before React mounts and before first paint, so the correct
-      // theme is applied immediately - no light-mode flash on dark startup.
       (function () {
-        var stored = localStorage.getItem('chat-studio-theme') || 'system'
-        var resolved =
-          stored === 'system'
-            ? window.matchMedia('(prefers-color-scheme: dark)').matches
-              ? 'dark'
-              : 'light'
-            : stored
+        var id = localStorage.getItem('chat-studio-theme-id')
+        if (!id) {
+          var legacy = localStorage.getItem('chat-studio-theme') || 'system'
+          if (legacy === 'light') id = 'light-modern'
+          else if (legacy === 'dark') id = 'dark-modern'
+          else id = legacy
+        }
+        var lightIds = { 'light-modern': 1, 'solarized-light': 1 }
+        var resolved = id === 'system'
+          ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+          : (lightIds[id] ? 'light' : 'dark')
         document.documentElement.dataset.theme = resolved
       })()
     </script>

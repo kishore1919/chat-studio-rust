@@ -25,7 +25,7 @@ mermaid.initialize({
 export function MermaidBlock({ chart }: MermaidBlockProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const uniqueId = useId().replace(/[:]/g, '_')
-  const resolvedTheme = useThemeStore((s) => s.resolved)
+  const resolvedType = useThemeStore((s) => s.resolved?.meta.type ?? 'dark')
 
   const [svg, setSvg] = useState<string>('')
   const [error, setError] = useState<string | null>(null)
@@ -42,7 +42,7 @@ export function MermaidBlock({ chart }: MermaidBlockProps) {
       try {
         mermaid.initialize({
           startOnLoad: false,
-          theme: resolvedTheme === 'dark' ? 'dark' : 'default',
+          theme: resolvedType === 'light' ? 'default' : 'dark',
           securityLevel: 'loose',
           fontFamily: 'inherit',
         })
@@ -66,7 +66,7 @@ export function MermaidBlock({ chart }: MermaidBlockProps) {
     return () => {
       active = false
     }
-  }, [cleanChart, resolvedTheme, uniqueId])
+  }, [cleanChart, resolvedType, uniqueId])
 
   const handleCopy = async () => {
     await navigator.clipboard.writeText(cleanChart)
@@ -79,9 +79,9 @@ export function MermaidBlock({ chart }: MermaidBlockProps) {
   const handleResetZoom = () => setZoom(1)
 
   return (
-    <div className="my-3 overflow-hidden rounded-xl border border-border bg-card shadow-xs transition-colors">
+    <div className="my-3 overflow-hidden rounded-xl border border-border/40 bg-card shadow-xs transition-colors">
       {/* Header / Actions */}
-      <div className="flex items-center justify-between border-b border-border/60 bg-muted/40 px-3 py-1.5 text-xs text-muted-foreground">
+      <div className="flex items-center justify-between border-b border-border/30 bg-muted/40 px-3 py-1.5 text-xs text-muted-foreground">
         <div className="flex items-center gap-1.5 font-medium">
           <span className="font-mono text-[11px] text-primary">mermaid</span>
           <span className="text-muted-foreground/40">·</span>

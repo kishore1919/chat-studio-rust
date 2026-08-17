@@ -78,7 +78,6 @@ export function ChatHeader({
   const refreshModels = useSettingsStore((s) => s.refreshModels)
   const active = conversations.find((c) => c.id === activeConversationId)
 
-  const [editingModel, setEditingModel] = useState(false)
   const [draftProvider, setDraftProvider] = useState('')
   const [draftModel, setDraftModel] = useState('')
 
@@ -86,6 +85,7 @@ export function ChatHeader({
   const [draftTitle, setDraftTitle] = useState('')
 
   const [confirmClear, setConfirmClear] = useState(false)
+  const [customModelOpen, setCustomModelOpen] = useState(false)
 
   const agents = settings?.agents?.filter((a) => a.enabled) ?? []
   const currentAgent = agents.find((a) => a.id === activeAgentId) ?? agents[0]
@@ -100,20 +100,6 @@ export function ChatHeader({
     if (agent && agent.provider && agent.model && active) {
       setConversationModel(active.id, agent.provider, agent.model)
     }
-  }
-
-  const startEditingModel = () => {
-    if (!active) return
-    setDraftProvider(active.provider)
-    setDraftModel(active.model)
-    setEditingModel(true)
-  }
-
-  const commitModel = () => {
-    if (active && draftModel.trim()) {
-      setConversationModel(active.id, draftProvider, draftModel.trim())
-    }
-    setEditingModel(false)
   }
 
   const startEditingTitle = () => {
@@ -134,10 +120,6 @@ export function ChatHeader({
     else if (e.key === 'Escape') setEditingTitle(false)
   }
 
-  const handleModelKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') commitModel()
-    else if (e.key === 'Escape') setEditingModel(false)
-  }
 
   const suggestions = modelsByProvider[draftProvider] ?? []
   const enabledProviders = settings?.providers.filter((p) => p.enabled) ?? []
@@ -146,20 +128,30 @@ export function ChatHeader({
   const handleSelect = (value: string) => {
     if (!active) return
     if (value === CUSTOM_MODEL_VALUE) {
-      startEditingModel()
+      setDraftProvider(active.provider)
+      setDraftModel(active.model)
+      setCustomModelOpen(true)
       return
     }
     const [providerId, modelId] = value.split(VALUE_SEP)
     setConversationModel(active.id, providerId, modelId)
   }
 
+  const commitCustomModel = () => {
+    if (active && draftModel.trim()) {
+      setConversationModel(active.id, draftProvider, draftModel.trim())
+    }
+    setCustomModelOpen(false)
+  }
+
   return (
-    <header className="flex h-12 shrink-0 items-center justify-between border-b border-border px-3 select-none">
+    <header className="flex h-12 shrink-0 items-center justify-between border-b border-border/40 px-3 select-none">
       <div className="flex min-w-0 items-center gap-2">
         <Button
           variant="ghost"
           size="icon-sm"
           onClick={onToggleSidebar}
+          aria-label="Toggle sidebar"
           className="size-8 text-muted-foreground hover:text-foreground"
           title="Toggle sidebar"
         >
@@ -235,8 +227,7 @@ export function ChatHeader({
             </Select>
           </div>
 
-          {/* Model Selector */}
-          {active && !editingModel && (
+          {active && (
             <div className="flex items-center">
               <span className="mx-1 text-muted-foreground/60">·</span>
               <Select
@@ -296,26 +287,39 @@ export function ChatHeader({
             </div>
           )}
 
-          {active && editingModel && (
-            <div className="flex items-center gap-1.5">
-              <span className="text-muted-foreground/60">·</span>
+          <Dialog open={customModelOpen} onOpenChange={setCustomModelOpen}>
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle>Custom model</DialogTitle>
+                <DialogDescription>Enter the model ID to use for this conversation.</DialogDescription>
+              </DialogHeader>
               <Input
                 autoFocus
                 value={draftModel}
                 onChange={(e) => setDraftModel(e.target.value)}
-                onKeyDown={handleModelKeyDown}
-                onBlur={commitModel}
-                list="model-suggestions"
-                placeholder="Type a model id..."
-                className="h-7 w-48 border-ring text-xs font-mono"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') commitCustomModel()
+                  else if (e.key === 'Escape') setCustomModelOpen(false)
+                }}
+                list="model-suggestions-custom"
+                placeholder="e.g. gpt-4o, claude-3-5-sonnet"
+                className="h-8 font-mono text-xs"
               />
-              <datalist id="model-suggestions">
+              <datalist id="model-suggestions-custom">
                 {suggestions.map((m) => (
                   <option key={m.id} value={m.id} />
                 ))}
               </datalist>
-            </div>
-          )}
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setCustomModelOpen(false)}>
+                  Cancel
+                </Button>
+                <Button onClick={commitCustomModel} disabled={!draftModel.trim()}>
+                  Use model
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </div>
       </div>
 
@@ -325,6 +329,7 @@ export function ChatHeader({
             variant="ghost"
             size="icon-sm"
             onClick={onToggleMindMap}
+            aria-label={mindMapOpen ? 'Hide mind map' : 'Show mind map'}
             className={cn(
               'size-8 transition-colors',
               mindMapOpen
@@ -341,6 +346,7 @@ export function ChatHeader({
             variant="ghost"
             size="icon-sm"
             onClick={() => setConfirmClear(true)}
+            aria-label="Clear conversation"
             className="size-8 text-muted-foreground hover:text-foreground"
             title="Clear context"
           >
@@ -351,6 +357,7 @@ export function ChatHeader({
           variant="ghost"
           size="icon-sm"
           onClick={onOpenSettings}
+          aria-label="Open settings"
           className="size-8 text-muted-foreground hover:text-foreground"
           title="Settings (Ctrl+,)"
         >

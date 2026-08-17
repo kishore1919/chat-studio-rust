@@ -64,6 +64,9 @@ export interface Settings {
   default_provider: string | null
   default_model: string | null
   theme: ThemePreference
+  theme_id: string
+  accent: string | null
+  border_visibility: string
   font_size: number
   system_prompt: string | null
   mcp_servers: McpServerConfig[]

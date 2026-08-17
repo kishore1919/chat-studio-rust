@@ -190,6 +190,12 @@ pub struct Settings {
     pub default_model: Option<String>,
     #[serde(default = "default_theme")]
     pub theme: ThemePreference,
+    #[serde(default = "default_theme_id")]
+    pub theme_id: String,
+    #[serde(default)]
+    pub accent: Option<String>,
+    #[serde(default = "default_border_visibility")]
+    pub border_visibility: String,
     #[serde(default = "default_font_size")]
     pub font_size: u32,
     #[serde(default)]
@@ -204,6 +210,25 @@ pub struct Settings {
 
 fn default_theme() -> ThemePreference {
     ThemePreference::System
+}
+
+fn default_theme_id() -> String {
+    "system".into()
+}
+
+fn default_border_visibility() -> String {
+    "subtle".into()
+}
+
+fn migrate_theme_id(theme: &ThemePreference, raw: &str) -> String {
+    if raw.contains("theme_id") {
+        return String::new();
+    }
+    match theme {
+        ThemePreference::Light => "light-modern".into(),
+        ThemePreference::Dark => "dark-modern".into(),
+        ThemePreference::System => "system".into(),
+    }
 }
 
 fn default_font_size() -> u32 {
@@ -248,6 +273,9 @@ impl Default for Settings {
             default_provider: None,
             default_model: None,
             theme: ThemePreference::System,
+            theme_id: default_theme_id(),
+            accent: None,
+            border_visibility: default_border_visibility(),
             font_size: 14,
             system_prompt: None,
             mcp_servers: Vec::new(),
@@ -275,7 +303,15 @@ pub fn load_settings() -> anyhow::Result<Settings> {
         return Ok(settings);
     }
     let raw = std::fs::read_to_string(&path)?;
-    Ok(toml::from_str(&raw)?)
+    let mut settings: Settings = toml::from_str(&raw)?;
+    if settings.theme_id.is_empty() {
+        let migrated = migrate_theme_id(&settings.theme, &raw);
+        if !migrated.is_empty() {
+            settings.theme_id = migrated;
+            let _ = save_settings(&settings);
+        }
+    }
+    Ok(settings)
 }
 
 pub fn save_settings(settings: &Settings) -> anyhow::Result<()> {

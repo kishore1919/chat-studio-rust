@@ -27,7 +27,13 @@ export default function App() {
       {route === 'chat' ? (
         <Chat onOpenSettings={() => setRoute('settings')} />
       ) : (
-        <Suspense fallback={null}>
+        <Suspense
+          fallback={
+            <div className="flex flex-1 items-center justify-center p-8">
+              <div className="size-5 animate-spin rounded-full border-2 border-border border-t-primary" aria-label="Loading settings" />
+            </div>
+          }
+        >
           <Settings onBack={() => setRoute('chat')} />
         </Suspense>
       )}
