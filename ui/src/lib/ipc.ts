@@ -21,8 +21,18 @@ export const ipc = {
   getMessages: (conversationId: number, limit: number, beforeId: number | null) =>
     invoke<Message[]>('get_messages', { conversationId, limit, beforeId }),
 
-  createConversation: (provider: string, model: string) =>
-    invoke<Conversation>('create_conversation', { provider, model }),
+  createConversation: (
+    provider: string,
+    model: string,
+    systemPrompt?: string | null,
+    agentId?: string | null,
+  ) =>
+    invoke<Conversation>('create_conversation', {
+      provider,
+      model,
+      systemPrompt: systemPrompt ?? null,
+      agentId: agentId ?? null,
+    }),
 
   renameConversation: (conversationId: number, title: string) =>
     invoke<void>('rename_conversation', { conversationId, title }),

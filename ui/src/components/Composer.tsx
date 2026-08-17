@@ -241,8 +241,8 @@ export function Composer() {
   return (
     <div
       className={cn(
-        'relative border-t p-3 transition-colors',
-        dragOver ? 'border-primary/60 bg-accent/20' : 'border-border/40',
+        'relative p-3 transition-colors',
+        dragOver ? 'bg-accent/20' : '',
       )}
       onDragOver={(e) => {
         e.preventDefault()

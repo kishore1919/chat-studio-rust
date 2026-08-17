@@ -255,7 +255,7 @@ fn migrate_theme_id(theme: &ThemePreference, raw: &str) -> String {
 }
 
 fn default_font_size() -> u32 {
-    14
+    16
 }
 
 fn default_context_tokens() -> u32 {
@@ -306,7 +306,7 @@ impl Default for Settings {
             theme_id: default_theme_id(),
             accent: None,
             border_visibility: default_border_visibility(),
-            font_size: 14,
+            font_size: 16,
             system_prompt: None,
             mcp_servers: Vec::new(),
             skills: default_skills(),

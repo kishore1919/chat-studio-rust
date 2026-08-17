@@ -13,9 +13,16 @@
    swapped alongside data-theme rather than picked by a media query, since
    the user can override the OS preference from Settings. */
 
-/* Design tokens. :root holds light; [data-theme="dark"] overrides.
-   Theme.ts resolves "system" to a concrete light/dark value and sets
-   data-theme itself, so this file never needs to read matchMedia.
+/* Design tokens, modeled on Cherry Studio's palette: neutral grays for all
+   chrome (background/border/text), a single green brand accent that stays
+   the same hex in both modes, and borders (not fill color) doing most of the
+   work of separating surfaces - most cards here are the same color as the
+   page and rely on `border` to read as a card. Values are converted from
+   Cherry Studio's own oklch tokens (packages/ui/src/styles/tokens/colors) to
+   hex/rgba for this app's existing var scheme. :root holds light;
+   [data-theme="dark"] overrides. Theme.ts resolves "system" to a concrete
+   light/dark value and sets data-theme itself, so this file never needs to
+   read matchMedia.
 
    Two layers here:
    - the app's own tokens (--bg, --text, --accent, ...) carried over from
@@ -24,33 +31,33 @@
      aliased onto the same values, so every shadcn primitive picks up this
      palette instead of its zinc/slate defaults. Note shadcn's `--accent` is
      a subtle hover/highlight *surface*, not the brand color - it maps to
-     --accent-bg (the tinted purple), while --primary (buttons, CTAs) maps
-     to the solid --accent purple. */
+     --accent-bg (the tinted green), while --primary (buttons, CTAs) maps
+     to the solid --accent green. */
 :root {
   /* Overwritten by applyTheme's setProperty write once settings load; this is
      only the pre-JS/no-settings fallback so text isn't unstyled at first paint. */
-  --chat-font-size: 14px;
+  --chat-font-size: 16px;
   /* Shared measure every message row centers in - ~75ch at the default 14px
      size, and stays a comfortable reading width if the user bumps font-size.
      Without this, each bubble sized itself against the full window: short
      messages left a dead zone, and assistant cards varied width per message. */
   --reading-max: 46rem;
   --bg: #ffffff;
-  --bg-elevated: #f7f7f8;
-  --bg-sidebar: #fafafa;
-  --bg-hover: #f0f0f1;
-  --border: #e5e4e7;
-  --border-strong: #d8d7da;
-  --text: #16171d;
-  --text-muted: #6e6a78;
-  --accent: #aa3bff;
-  --accent-bg: rgba(170, 59, 255, 0.1);
-  --bubble-user: #efe7ff;
-  --bubble-assistant: #f6f6f8;
-  --danger: #dc2626;
-  --success: #16a34a;
-  --shadow-xs: 0 1px 2px rgba(16, 16, 24, 0.06);
-  --shadow-sm: 0 2px 8px rgba(16, 16, 24, 0.08);
+  --bg-elevated: #ffffff;
+  --bg-sidebar: #f4f4f4;
+  --bg-hover: rgba(0, 0, 0, 0.05);
+  --border: rgba(0, 0, 0, 0.1);
+  --border-strong: rgba(0, 0, 0, 0.2);
+  --text: #191919;
+  --text-muted: #737373;
+  --accent: #3fd55a;
+  --accent-bg: rgba(63, 213, 90, 0.12);
+  --bubble-user: rgba(0, 0, 0, 0.045);
+  --bubble-assistant: transparent;
+  --danger: #f04546;
+  --success: #26c45b;
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.08);
 
   --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
   --mono: ui-monospace, Consolas, 'SFMono-Regular', monospace;
@@ -79,27 +86,35 @@
 }
 
 :root[data-theme='dark'] {
-  --bg: #16171d;
-  --bg-elevated: #1c1d24;
-  --bg-sidebar: #1a1b21;
-  --bg-hover: #24252d;
-  --border: #2e303a;
-  --border-strong: #3a3c49;
-  --text: #f3f4f6;
-  --text-muted: #9ca3af;
-  --accent: #c084fc;
-  --accent-bg: rgba(192, 132, 252, 0.15);
-  --bubble-user: #362a4a;
-  --bubble-assistant: #1e1f28;
-  --danger: #f87171;
-  --success: #4ade80;
-  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.35);
-  --shadow-sm: 0 4px 16px rgba(0, 0, 0, 0.45);
+  --bg: #181818;
+  /* A shade lighter than --bg (unlike Cherry Studio's own near-identical
+     card/background, which leans on OS window vibrancy for separation that
+     a webview can't reproduce) - this app's settings/message chrome uses
+     bg-card in many places that have no border of their own, so cards need
+     to actually read as elevated here. */
+  --bg-elevated: #262626;
+  --bg-sidebar: #1f1f1f;
+  --bg-hover: rgba(255, 255, 255, 0.1);
+  --border: rgba(255, 255, 255, 0.1);
+  --border-strong: rgba(255, 255, 255, 0.2);
+  --text: #e8e8e8;
+  --text-muted: #a1a1a1;
+  --accent: #3fd55a;
+  --accent-bg: rgba(63, 213, 90, 0.15);
+  --bubble-user: rgba(255, 255, 255, 0.08);
+  --bubble-assistant: transparent;
+  --danger: #f04546;
+  --success: #26c45b;
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.4);
 
   color-scheme: dark;
 
-  --primary-foreground: #16171d;
-  --destructive-foreground: #16171d;
+  /* Same green in both modes, but flipped to dark text on it in dark mode -
+     matches Cherry Studio's own choice, and reads better than white-on-green
+     against a dark surrounding UI. */
+  --primary-foreground: #171717;
+  --destructive-foreground: #ffffff;
 }
 
 /* Tailwind v4: expose the CSS custom properties above as theme colors, so
@@ -125,6 +140,9 @@
   --color-input: var(--input);
   --color-ring: var(--ring);
   --color-sidebar: var(--bg-sidebar);
+  --color-success: var(--success);
+  --color-danger: var(--danger);
+  --color-border-strong: var(--border-strong);
 
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);

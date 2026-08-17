@@ -42,7 +42,12 @@ interface ChatState {
   loadConversations: () => Promise<void>
   selectConversation: (id: number) => Promise<void>
   loadOlderMessages: (conversationId: number) => Promise<void>
-  createConversation: (provider: string, model: string) => Promise<Conversation>
+  createConversation: (
+    provider: string,
+    model: string,
+    systemPrompt?: string | null,
+    agentId?: string | null,
+  ) => Promise<Conversation>
   renameConversation: (id: number, title: string) => Promise<void>
   pinConversation: (id: number, pinned: boolean) => Promise<void>
   clearConversation: (id: number) => Promise<void>
@@ -74,13 +79,22 @@ export const useChatStore = create<ChatState>((set, get) => ({
   loadConversations: async () => {
     const conversations = await ipc.listConversations()
     set({ conversations })
-    if (get().activeConversationId === null && conversations.length > 0) {
-      await get().selectConversation(conversations[0].id)
+    const activeAgent = get().activeAgentId
+    const matching = activeAgent
+      ? conversations.find((c) => (c.agent_id || 'general-assistant') === activeAgent)
+      : conversations[0]
+    if (get().activeConversationId === null && matching) {
+      await get().selectConversation(matching.id)
     }
   },
 
   selectConversation: async (id) => {
-    set({ activeConversationId: id })
+    const conv = get().conversations.find((c) => c.id === id)
+    if (conv?.agent_id) {
+      set({ activeAgentId: conv.agent_id, activeConversationId: id })
+    } else {
+      set({ activeConversationId: id })
+    }
     if (get().messagesByConversation[id]) {
       set((s) => touchCache(s, id))
       return
@@ -122,8 +136,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
     })
   },
 
-  createConversation: async (provider, model) => {
-    const conv = await ipc.createConversation(provider, model)
+  createConversation: async (provider, model, systemPrompt, agentId) => {
+    const conv = await ipc.createConversation(provider, model, systemPrompt, agentId)
     set((s) => {
       const touched = touchCache(s, conv.id)
       return {
@@ -131,6 +145,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         ...touched,
         messagesByConversation: { ...touched.messagesByConversation, [conv.id]: [] },
         activeConversationId: conv.id,
+        activeAgentId: conv.agent_id || agentId || s.activeAgentId,
       }
     })
     return conv

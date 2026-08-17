@@ -173,9 +173,9 @@ export function SkillsPane() {
     <div className="max-w-3xl space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-base font-semibold text-foreground">Skills & Persona Prompts</h2>
+          <h2 className="text-base font-semibold text-foreground">Skills</h2>
           <p className="text-xs text-muted-foreground">
-            Modular abilities and prompts from built-ins, global directories (~/.agents, ~/.claude, ~/.gemini), and custom skills.
+            Modular abilities and toolsets from built-ins, global directories (~/.agents, ~/.claude, ~/.gemini), and custom skills.
           </p>
         </div>
         <div className="flex items-center gap-2">

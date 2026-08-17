@@ -1,13 +1,11 @@
-import { useState, type KeyboardEvent } from 'react'
+import { useState } from 'react'
 import {
   BotIcon,
   BrainIcon,
-  CheckIcon,
   CodeIcon,
   EraserIcon,
   GitBranchIcon,
   MenuIcon,
-  PencilIcon,
   SearchIcon,
   SettingsIcon,
   SparklesIcon,
@@ -70,11 +68,8 @@ export function ChatHeader({
   const activeConversationId = useChatStore((s) => s.activeConversationId)
   const conversations = useChatStore((s) => s.conversations)
   const setConversationModel = useChatStore((s) => s.setConversationModel)
-  const setConversationSystemPrompt = useChatStore((s) => s.setConversationSystemPrompt)
-  const renameConversation = useChatStore((s) => s.renameConversation)
   const clearConversation = useChatStore((s) => s.clearConversation)
   const activeAgentId = useChatStore((s) => s.activeAgentId)
-  const setActiveAgentId = useChatStore((s) => s.setActiveAgentId)
   const settings = useSettingsStore((s) => s.settings)
   const modelsByProvider = useSettingsStore((s) => s.modelsByProvider)
   const refreshModels = useSettingsStore((s) => s.refreshModels)
@@ -83,51 +78,12 @@ export function ChatHeader({
   const [draftProvider, setDraftProvider] = useState('')
   const [draftModel, setDraftModel] = useState('')
 
-  const [editingTitle, setEditingTitle] = useState(false)
-  const [draftTitle, setDraftTitle] = useState('')
-
   const [confirmClear, setConfirmClear] = useState(false)
   const [customModelOpen, setCustomModelOpen] = useState(false)
 
   const agents = settings?.agents?.filter((a) => a.enabled) ?? []
-  const currentAgent = agents.find((a) => a.id === activeAgentId) ?? agents[0]
-
-  const handleAgentSelect = (agentId: string) => {
-    if (agentId === '__manage__') {
-      onOpenSettings()
-      return
-    }
-    setActiveAgentId(agentId)
-    const agent = agents.find((a) => a.id === agentId)
-    if (agent && active) {
-      // This is what makes picking an agent actually do something - it used
-      // to only swap provider/model (and only for the few agents that
-      // specify one), never applying the agent's own system prompt.
-      setConversationSystemPrompt(active.id, agent.system_prompt)
-      if (agent.provider && agent.model) {
-        setConversationModel(active.id, agent.provider, agent.model)
-      }
-    }
-  }
-
-  const startEditingTitle = () => {
-    if (!active) return
-    setDraftTitle(active.title)
-    setEditingTitle(true)
-  }
-
-  const commitTitle = () => {
-    if (active && draftTitle.trim() && draftTitle.trim() !== active.title) {
-      renameConversation(active.id, draftTitle.trim())
-    }
-    setEditingTitle(false)
-  }
-
-  const handleTitleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') commitTitle()
-    else if (e.key === 'Escape') setEditingTitle(false)
-  }
-
+  const conversationAgentId = active?.agent_id || activeAgentId || 'general-assistant'
+  const currentAgent = agents.find((a) => a.id === conversationAgentId) ?? agents[0]
 
   const suggestions = modelsByProvider[draftProvider] ?? []
   const enabledProviders = settings?.providers.filter((p) => p.enabled) ?? []
@@ -166,82 +122,23 @@ export function ChatHeader({
           <MenuIcon className="size-4" />
         </Button>
 
-        <div className="flex items-center gap-1.5 text-[13px] min-w-0">
-          {/* Editable Chat Heading */}
-          {active && editingTitle ? (
-            <div className="flex items-center gap-1">
-              <Input
-                autoFocus
-                value={draftTitle}
-                onChange={(e) => setDraftTitle(e.target.value)}
-                onKeyDown={handleTitleKeyDown}
-                onBlur={commitTitle}
-                className="h-7 w-48 text-xs font-semibold"
-              />
-              <Button variant="ghost" size="icon-sm" onClick={commitTitle} className="size-6">
-                <CheckIcon className="size-3 text-success" />
-              </Button>
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={startEditingTitle}
-              className="group flex max-w-44 items-center gap-1 text-left font-semibold text-foreground hover:text-primary transition-colors cursor-pointer"
-              title="Click to rename chat heading"
-            >
-              <span className="truncate">{active?.title || 'Chat Studio'}</span>
-              {active && (
-                <PencilIcon className="size-3 opacity-0 group-hover:opacity-60 transition-opacity shrink-0" />
-              )}
-            </button>
-          )}
-
-          {/* Assistant Selector - hidden while inert, see lib/features.ts */}
+        <div className="flex items-center gap-2 text-[13px] min-w-0">
+          {/* Assistant Badge - Fixed to this conversation */}
           {FEATURES.agents && (
-            <>
-              <span className="mx-0.5 h-4 w-px bg-border/60" aria-hidden="true" />
-              <div className="flex items-center">
-                <Select
-                  value={currentAgent?.id ?? 'general-assistant'}
-                  onValueChange={handleAgentSelect}
-                >
-                  <SelectTrigger
-                    size="sm"
-                    className="h-7 max-w-44 border-0 bg-accent/40 px-2 shadow-none hover:bg-accent text-xs font-medium rounded-md"
-                  >
-                    <span className="flex items-center gap-1.5 truncate">
-                      {getAgentIcon(currentAgent?.icon ?? 'bot')}
-                      <span className="truncate">{currentAgent?.name ?? 'Assistant'}</span>
-                    </span>
-                  </SelectTrigger>
-                  <SelectContent className="max-h-80 max-w-64">
-                    <SelectGroup>
-                      <SelectLabel className="font-semibold text-xs">Assistants & Agents</SelectLabel>
-                      {agents.map((agent) => (
-                        <SelectItem key={agent.id} value={agent.id}>
-                          <div className="flex items-center gap-2">
-                            {getAgentIcon(agent.icon)}
-                            <div className="flex flex-col text-left">
-                              <span className="font-medium text-xs">{agent.name}</span>
-                              <span className="text-[10px] text-muted-foreground">{agent.role}</span>
-                            </div>
-                          </div>
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
-                    <SelectSeparator />
-                    <SelectItem value="__manage__" className="text-xs text-primary font-medium">
-                      + Manage Assistants in Settings...
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </>
+            <div
+              className="flex h-7 items-center gap-1.5 rounded-md bg-accent/40 px-2.5 text-xs font-semibold text-foreground border border-border/30"
+              title={`Assistant: ${currentAgent?.name ?? 'Default Assistant'} (locked to this chat)`}
+            >
+              <span className="size-4 rounded bg-primary/20 flex items-center justify-center">
+                {getAgentIcon(currentAgent?.icon ?? 'bot')}
+              </span>
+              <span className="truncate max-w-[150px]">{currentAgent?.name ?? 'Default Assistant'}</span>
+            </div>
           )}
 
+          {/* Model Selector */}
           {active && (
             <div className="flex items-center">
-              {!FEATURES.agents && <span className="mx-0.5 h-4 w-px bg-border/60" aria-hidden="true" />}
               <Select
                 value={`${active.provider}${VALUE_SEP}${active.model}`}
                 onValueChange={handleSelect}

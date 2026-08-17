@@ -9,6 +9,7 @@ pub struct Conversation {
     pub provider: String,
     pub model: String,
     pub system_prompt: Option<String>,
+    pub agent_id: Option<String>,
     pub pinned: bool,
     pub created_at: i64,
     pub updated_at: i64,
@@ -29,7 +30,7 @@ pub struct Message {
     pub created_at: i64,
 }
 
-const SCHEMA_VERSION: i64 = 3;
+const SCHEMA_VERSION: i64 = 4;
 
 pub fn open(path: &Path) -> rusqlite::Result<Connection> {
     let conn = Connection::open(path)?;
@@ -68,6 +69,7 @@ fn init_schema(conn: &Connection) -> rusqlite::Result<()> {
             provider TEXT NOT NULL,
             model TEXT NOT NULL,
             system_prompt TEXT,
+            agent_id TEXT DEFAULT 'general-assistant',
             pinned INTEGER NOT NULL DEFAULT 0,
             created_at INTEGER NOT NULL,
             updated_at INTEGER NOT NULL
@@ -89,11 +91,6 @@ fn init_schema(conn: &Connection) -> rusqlite::Result<()> {
         ",
     )?;
 
-    // CREATE TABLE IF NOT EXISTS above is a no-op against tables that
-    // already existed under schema version 1, which predates the
-    // `pinned`/`reasoning` columns - add them explicitly for upgrades. This
-    // must run before `idx_conversations_sort` is created below: that index
-    // is on `pinned`, which doesn't exist on a v1 table until this ALTER runs.
     if version == 1 {
         conn.execute(
             "ALTER TABLE conversations ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0",
@@ -102,9 +99,24 @@ fn init_schema(conn: &Connection) -> rusqlite::Result<()> {
         conn.execute("ALTER TABLE messages ADD COLUMN reasoning TEXT", [])?;
     }
 
-    // Safe to run unconditionally now that `pinned` is guaranteed to exist,
-    // whether this connection just got it from the ALTER above or already
-    // had it from a fresh `CREATE TABLE`.
+    if version < 4 {
+        // Safe upgrade: add agent_id if upgrading from version <= 3
+        let has_agent_col: bool = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('conversations') WHERE name = 'agent_id'",
+                [],
+                |r| r.get::<_, i64>(0),
+            )
+            .map(|c| c > 0)
+            .unwrap_or(false);
+        if !has_agent_col {
+            conn.execute(
+                "ALTER TABLE conversations ADD COLUMN agent_id TEXT DEFAULT 'general-assistant'",
+                [],
+            )?;
+        }
+    }
+
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_conversations_sort ON conversations(pinned DESC, updated_at DESC)",
         [],
@@ -124,7 +136,7 @@ fn now() -> i64 {
 }
 
 const CONVERSATION_COLUMNS: &str =
-    "id, title, provider, model, system_prompt, pinned, created_at, updated_at";
+    "id, title, provider, model, system_prompt, agent_id, pinned, created_at, updated_at";
 
 fn row_to_conversation(r: &rusqlite::Row) -> rusqlite::Result<Conversation> {
     Ok(Conversation {
@@ -133,9 +145,10 @@ fn row_to_conversation(r: &rusqlite::Row) -> rusqlite::Result<Conversation> {
         provider: r.get(2)?,
         model: r.get(3)?,
         system_prompt: r.get(4)?,
-        pinned: r.get::<_, i64>(5)? != 0,
-        created_at: r.get(6)?,
-        updated_at: r.get(7)?,
+        agent_id: r.get(5)?,
+        pinned: r.get::<_, i64>(6)? != 0,
+        created_at: r.get(7)?,
+        updated_at: r.get(8)?,
     })
 }
 
@@ -151,12 +164,14 @@ pub fn create_conversation(
     conn: &Connection,
     provider: &str,
     model: &str,
+    system_prompt: Option<&str>,
+    agent_id: Option<&str>,
 ) -> rusqlite::Result<Conversation> {
     let ts = now();
     conn.execute(
-        "INSERT INTO conversations (title, provider, model, system_prompt, pinned, created_at, updated_at)
-         VALUES (?1, ?2, ?3, NULL, 0, ?4, ?4)",
-        params!["New chat", provider, model, ts],
+        "INSERT INTO conversations (title, provider, model, system_prompt, agent_id, pinned, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, 0, ?6, ?6)",
+        params!["New chat", provider, model, system_prompt, agent_id.unwrap_or("general-assistant"), ts],
     )?;
     let id = conn.last_insert_rowid();
     Ok(Conversation {
@@ -164,7 +179,8 @@ pub fn create_conversation(
         title: "New chat".into(),
         provider: provider.into(),
         model: model.into(),
-        system_prompt: None,
+        system_prompt: system_prompt.map(Into::into),
+        agent_id: Some(agent_id.unwrap_or("general-assistant").into()),
         pinned: false,
         created_at: ts,
         updated_at: ts,
@@ -428,7 +444,7 @@ mod tests {
     #[test]
     fn create_and_list_conversations() {
         let conn = memory_db();
-        let conv = create_conversation(&conn, "openrouter", "gpt-test").unwrap();
+        let conv = create_conversation(&conn, "openrouter", "gpt-test", None, None).unwrap();
         assert_eq!(conv.title, "New chat");
         assert!(!conv.pinned);
 
@@ -440,7 +456,7 @@ mod tests {
     #[test]
     fn rename_and_delete_conversation() {
         let conn = memory_db();
-        let conv = create_conversation(&conn, "openrouter", "gpt-test").unwrap();
+        let conv = create_conversation(&conn, "openrouter", "gpt-test", None, None).unwrap();
         rename_conversation(&conn, conv.id, "Renamed").unwrap();
         let fetched = get_conversation(&conn, conv.id).unwrap().unwrap();
         assert_eq!(fetched.title, "Renamed");
@@ -452,8 +468,8 @@ mod tests {
     #[test]
     fn pinned_conversations_sort_first() {
         let conn = memory_db();
-        let a = create_conversation(&conn, "openrouter", "m").unwrap();
-        let b = create_conversation(&conn, "openrouter", "m").unwrap();
+        let a = create_conversation(&conn, "openrouter", "m", None, None).unwrap();
+        let b = create_conversation(&conn, "openrouter", "m", None, None).unwrap();
         set_conversation_pinned(&conn, b.id, true).unwrap();
 
         let list = list_conversations(&conn).unwrap();
@@ -464,7 +480,7 @@ mod tests {
     #[test]
     fn insert_and_paginate_messages() {
         let conn = memory_db();
-        let conv = create_conversation(&conn, "openrouter", "gpt-test").unwrap();
+        let conv = create_conversation(&conn, "openrouter", "gpt-test", None, None).unwrap();
         for i in 0..5 {
             insert_simple(&conn, conv.id, "user", &format!("message {i}"));
         }
@@ -483,7 +499,7 @@ mod tests {
     #[test]
     fn deleting_conversation_cascades_messages() {
         let conn = memory_db();
-        let conv = create_conversation(&conn, "openrouter", "gpt-test").unwrap();
+        let conv = create_conversation(&conn, "openrouter", "gpt-test", None, None).unwrap();
         insert_simple(&conn, conv.id, "user", "hi");
         delete_conversation(&conn, conv.id).unwrap();
 
@@ -496,7 +512,7 @@ mod tests {
     #[test]
     fn edit_and_delete_message() {
         let conn = memory_db();
-        let conv = create_conversation(&conn, "openrouter", "gpt-test").unwrap();
+        let conv = create_conversation(&conn, "openrouter", "gpt-test", None, None).unwrap();
         let id = insert_simple(&conn, conv.id, "user", "hi");
         edit_message(&conn, id, "edited").unwrap();
         let messages = get_messages(&conn, conv.id, 10, None).unwrap();
@@ -510,7 +526,7 @@ mod tests {
     #[test]
     fn delete_message_and_after_drops_trailing_messages() {
         let conn = memory_db();
-        let conv = create_conversation(&conn, "openrouter", "gpt-test").unwrap();
+        let conv = create_conversation(&conn, "openrouter", "gpt-test", None, None).unwrap();
         let first = insert_simple(&conn, conv.id, "user", "hi");
         let retry_target = insert_simple(&conn, conv.id, "assistant", "wrong answer");
         insert_simple(&conn, conv.id, "user", "follow up");
@@ -525,7 +541,7 @@ mod tests {
     #[test]
     fn clear_messages_empties_conversation_but_keeps_it() {
         let conn = memory_db();
-        let conv = create_conversation(&conn, "openrouter", "gpt-test").unwrap();
+        let conv = create_conversation(&conn, "openrouter", "gpt-test", None, None).unwrap();
         insert_simple(&conn, conv.id, "user", "hi");
         insert_simple(&conn, conv.id, "assistant", "hello");
 
@@ -538,7 +554,7 @@ mod tests {
     #[test]
     fn insert_message_persists_reasoning() {
         let conn = memory_db();
-        let conv = create_conversation(&conn, "openrouter", "gpt-test").unwrap();
+        let conv = create_conversation(&conn, "openrouter", "gpt-test", None, None).unwrap();
         insert_message(
             &conn,
             conv.id,
@@ -568,7 +584,7 @@ mod tests {
     #[should_panic(expected = "id must be positive")]
     fn delete_message_and_after_rejects_placeholder_id() {
         let conn = memory_db();
-        let conv = create_conversation(&conn, "openrouter", "m").unwrap();
+        let conv = create_conversation(&conn, "openrouter", "m", None, None).unwrap();
         insert_simple(&conn, conv.id, "user", "hi");
         insert_simple(&conn, conv.id, "assistant", "hello");
 
@@ -579,7 +595,7 @@ mod tests {
     #[should_panic(expected = "id must be positive")]
     fn delete_messages_after_rejects_placeholder_id() {
         let conn = memory_db();
-        let conv = create_conversation(&conn, "openrouter", "m").unwrap();
+        let conv = create_conversation(&conn, "openrouter", "m", None, None).unwrap();
         insert_simple(&conn, conv.id, "user", "hi");
 
         delete_messages_after(&conn, conv.id, -1).unwrap();
@@ -776,7 +792,7 @@ mod tests {
     #[test]
     fn get_context_messages_returns_newest_first_without_reasoning_columns() {
         let conn = memory_db();
-        let conv = create_conversation(&conn, "openrouter", "gpt-test").unwrap();
+        let conv = create_conversation(&conn, "openrouter", "gpt-test", None, None).unwrap();
         insert_simple(&conn, conv.id, "user", "first");
         insert_simple(&conn, conv.id, "assistant", "second");
         insert_simple(&conn, conv.id, "user", "third");
@@ -791,7 +807,7 @@ mod tests {
     #[test]
     fn edit_and_delete_message_touch_the_owning_conversation() {
         let conn = memory_db();
-        let conv = create_conversation(&conn, "openrouter", "m").unwrap();
+        let conv = create_conversation(&conn, "openrouter", "m", None, None).unwrap();
         let id = insert_simple(&conn, conv.id, "user", "hi");
 
         conn.execute(

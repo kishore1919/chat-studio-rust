@@ -117,9 +117,18 @@ pub fn create_conversation(
     state: State<AppState>,
     provider: String,
     model: String,
+    system_prompt: Option<String>,
+    agent_id: Option<String>,
 ) -> Result<db::Conversation, String> {
     let conn = state.db();
-    db::create_conversation(&conn, &provider, &model).map_err(db_err)
+    db::create_conversation(
+        &conn,
+        &provider,
+        &model,
+        system_prompt.as_deref(),
+        agent_id.as_deref(),
+    )
+    .map_err(db_err)
 }
 
 #[tauri::command]

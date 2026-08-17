@@ -41,7 +41,7 @@ export function MermaidBlock({ chart }: MermaidBlockProps) {
   // across re-renders, so mermaid reuses one scratch node instead of orphaning
   // a fresh measurement subtree under <body> on every render.
   const uniqueId = useId().replace(/[:]/g, '_')
-  const resolvedType = useThemeStore((s) => s.resolved?.meta.type ?? 'dark')
+  const resolvedType = useThemeStore((s) => s.resolvedType)
 
   const [svg, setSvg] = useState<string>('')
   const [error, setError] = useState<string | null>(null)

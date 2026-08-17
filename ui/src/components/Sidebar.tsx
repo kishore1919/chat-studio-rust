@@ -1,19 +1,25 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
+  BotIcon,
+  BrainIcon,
   CheckSquareIcon,
+  ChevronDownIcon,
   ChevronRightIcon,
+  CodeIcon,
+  MessageSquarePlusIcon,
   MoreHorizontalIcon,
   PencilIcon,
   PinIcon,
   PinOffIcon,
   PlusIcon,
   SearchIcon,
+  SparklesIcon,
   Trash2Icon,
   XIcon,
 } from 'lucide-react'
 import { useChatStore } from '../store/chat'
 import { useSettingsStore } from '../store/settings'
-import type { Conversation } from '../lib/types'
+import type { AgentConfig, Conversation } from '../lib/types'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -30,56 +36,29 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
 
 interface SidebarProps {
   collapsed: boolean
   /** Pins the sidebar open (vs. hover's temporary preview). */
   onExpand: () => void
+  onOpenSettings?: () => void
 }
 
-function relativeTime(unixSeconds: number) {
-  const diffMs = Date.now() - unixSeconds * 1000
-  const minutes = Math.floor(diffMs / 60000)
-  if (minutes < 1) return 'now'
-  if (minutes < 60) return `${minutes}m`
-  const hours = Math.floor(minutes / 60)
-  if (hours < 24) return `${hours}h`
-  return `${Math.floor(hours / 24)}d`
-}
-
-type Group = 'Pinned' | 'Today' | 'Yesterday' | 'Previous 7 Days' | 'Older'
-
-function startOfDay(date: Date) {
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()
-}
-
-/** Buckets an already-sorted (pinned-first, then newest-first) conversation
- * list into Cherry-Studio-style time groups. Pinned items always form their
- * own leading group regardless of when they were last touched. */
-function groupConversations(conversations: Conversation[]): [Group, Conversation[]][] {
-  const todayStart = startOfDay(new Date())
-  const yesterdayStart = todayStart - 86_400_000
-  const sevenDaysAgoStart = todayStart - 7 * 86_400_000
-
-  const buckets = new Map<Group, Conversation[]>()
-  for (const conv of conversations) {
-    let group: Group
-    if (conv.pinned) {
-      group = 'Pinned'
-    } else {
-      const updatedAtMs = conv.updated_at * 1000
-      if (updatedAtMs >= todayStart) group = 'Today'
-      else if (updatedAtMs >= yesterdayStart) group = 'Yesterday'
-      else if (updatedAtMs >= sevenDaysAgoStart) group = 'Previous 7 Days'
-      else group = 'Older'
-    }
-    if (!buckets.has(group)) buckets.set(group, [])
-    buckets.get(group)!.push(conv)
+function getAgentIcon(icon: string) {
+  switch (icon) {
+    case 'code':
+      return <CodeIcon className="size-4 text-primary shrink-0" />
+    case 'search':
+      return <SearchIcon className="size-4 text-primary shrink-0" />
+    case 'brain':
+      return <BrainIcon className="size-4 text-primary shrink-0" />
+    case 'sparkles':
+      return <SparklesIcon className="size-4 text-primary shrink-0" />
+    default:
+      return <BotIcon className="size-4 text-primary shrink-0" />
   }
-
-  const order: Group[] = ['Pinned', 'Today', 'Yesterday', 'Previous 7 Days', 'Older']
-  return order.filter((g) => buckets.has(g)).map((g) => [g, buckets.get(g)!])
 }
 
 interface ConversationRowProps {
@@ -94,14 +73,6 @@ interface ConversationRowProps {
   onDelete: () => void
 }
 
-/** A correct `role="listbox"`/`role="option"` pattern needs roving
- * `tabIndex`, `aria-activedescendant`, and full arrow/Home/End/type-ahead
- * handling - and it's the wrong pattern regardless, since each row nests its
- * own buttons (delete, the "more" menu), which is invalid inside an
- * `option`. This uses the standard overlay-button pattern instead: a
- * full-bleed button under everything provides native focus/Enter/Space/tab
- * order, and the visible content sits above it with pointer-events
- * re-enabled only on the bits that need their own clicks. */
 function ConversationRow({
   conv,
   active,
@@ -114,7 +85,7 @@ function ConversationRow({
   onDelete,
 }: ConversationRowProps) {
   return (
-    <li className="group relative">
+    <li className="group relative list-none">
       <button
         type="button"
         onClick={isSelectMode ? onToggleSelect : onSelect}
@@ -124,30 +95,25 @@ function ConversationRow({
       />
       <div
         className={cn(
-          'pointer-events-none relative z-10 flex items-start justify-between rounded-lg border px-2.5 py-2 text-[13px] transition-colors',
+          'pointer-events-none relative z-10 flex items-center justify-between rounded-lg border px-3 py-2 text-[13px] transition-all',
           isSelected
-            ? 'border-primary/20 bg-primary/10 font-medium text-foreground'
+            ? 'border-primary/30 bg-primary/10 font-medium text-foreground'
             : active
               ? 'border-border/40 bg-accent font-medium text-foreground shadow-xs'
-              : 'border-transparent text-muted-foreground group-hover:border-border/30 group-hover:bg-accent/50 group-hover:text-foreground',
+              : 'border-transparent text-muted-foreground hover:text-foreground group-hover:border-border/30 group-hover:bg-accent/40',
         )}
       >
-        <div className="flex min-w-0 flex-1 items-start gap-2">
+        <div className="flex min-w-0 flex-1 items-center gap-2">
           {isSelectMode && (
             <input
               type="checkbox"
               checked={isSelected}
               onChange={onToggleSelect}
-              className="pointer-events-auto mt-0.5 size-3.5 rounded border-border accent-primary cursor-pointer shrink-0"
+              className="pointer-events-auto size-3.5 rounded border-border accent-primary cursor-pointer shrink-0"
             />
           )}
           <div className="min-w-0 flex-1">
-            <div className="truncate text-foreground leading-snug">{conv.title}</div>
-            {conv.model && (
-              <div className="truncate text-[11px] text-muted-foreground font-mono">
-                {conv.model}
-              </div>
-            )}
+            <div className="truncate text-foreground leading-snug font-medium text-[13px]">{conv.title}</div>
           </div>
         </div>
 
@@ -156,9 +122,6 @@ function ConversationRow({
             {conv.pinned && (
               <PinIcon className="size-3 text-primary opacity-80 group-hover:hidden" />
             )}
-            <span className="text-[11px] text-muted-foreground group-hover:hidden">
-              {!conv.pinned && relativeTime(conv.updated_at)}
-            </span>
             <div className="hidden items-center gap-0.5 group-hover:flex">
               <Button
                 variant="ghost"
@@ -208,9 +171,11 @@ function ConversationRow({
   )
 }
 
-export function Sidebar({ collapsed, onExpand }: SidebarProps) {
+export function Sidebar({ collapsed, onExpand, onOpenSettings }: SidebarProps) {
   const conversations = useChatStore((s) => s.conversations)
   const activeConversationId = useChatStore((s) => s.activeConversationId)
+  const activeAgentId = useChatStore((s) => s.activeAgentId)
+  const setActiveAgentId = useChatStore((s) => s.setActiveAgentId)
   const selectConversation = useChatStore((s) => s.selectConversation)
   const createConversation = useChatStore((s) => s.createConversation)
   const renameConversation = useChatStore((s) => s.renameConversation)
@@ -219,6 +184,7 @@ export function Sidebar({ collapsed, onExpand }: SidebarProps) {
   const deleteConversations = useChatStore((s) => s.deleteConversations)
   const loadConversations = useChatStore((s) => s.loadConversations)
   const settings = useSettingsStore((s) => s.settings)
+  const saveSettings = useSettingsStore((s) => s.save)
   const autoCreatedRef = useRef(false)
 
   const [search, setSearch] = useState('')
@@ -227,6 +193,29 @@ export function Sidebar({ collapsed, onExpand }: SidebarProps) {
   const [confirmBatchDelete, setConfirmBatchDelete] = useState(false)
   const [renameTarget, setRenameTarget] = useState<{ id: number; title: string } | null>(null)
   const [renameDraft, setRenameDraft] = useState('')
+  const [addAssistantOpen, setAddAssistantOpen] = useState(false)
+  const [newAssistantName, setNewAssistantName] = useState('')
+  const [newAssistantRole, setNewAssistantRole] = useState('')
+  const [newAssistantPrompt, setNewAssistantPrompt] = useState('')
+
+  const agents: AgentConfig[] = useMemo(() => {
+    return settings?.agents?.filter((a) => a.enabled) ?? [
+      {
+        id: 'general-assistant',
+        name: 'Default Assistant',
+        description: 'Helpful AI Assistant',
+        role: 'Assistant',
+        system_prompt: '',
+        provider: null,
+        model: null,
+        skills: [],
+        icon: 'bot',
+        enabled: true,
+      },
+    ]
+  }, [settings?.agents])
+
+  const currentAgent = agents.find((a) => a.id === activeAgentId) ?? agents[0]
 
   useEffect(() => {
     loadConversations()
@@ -239,24 +228,87 @@ export function Sidebar({ collapsed, onExpand }: SidebarProps) {
       autoCreatedRef.current = true
       return
     }
-    const providerId = settings.default_provider ?? settings.providers[0]?.id
+    const providerId = currentAgent?.provider || settings.default_provider || settings.providers[0]?.id
     if (!providerId) return
     autoCreatedRef.current = true
-    createConversation(providerId, settings.default_model ?? '')
-  }, [settings, conversations, createConversation])
+    createConversation(
+      providerId,
+      currentAgent?.model || settings.default_model || '',
+      currentAgent?.system_prompt || null,
+      currentAgent?.id || 'general-assistant',
+    )
+  }, [settings, conversations, createConversation, currentAgent])
 
   const handleNewChat = () => {
     if (!settings) return
-    const providerId = settings.default_provider ?? settings.providers[0]?.id
+    const providerId = currentAgent?.provider || settings.default_provider || settings.providers[0]?.id
     if (!providerId) return
-    createConversation(providerId, settings.default_model ?? '')
+    const model = currentAgent?.model || settings.default_model || ''
+    createConversation(
+      providerId,
+      model,
+      currentAgent?.system_prompt || null,
+      currentAgent?.id || 'general-assistant',
+    )
   }
 
+  const handleSwitchAssistant = (agentId: string) => {
+    setActiveAgentId(agentId)
+    // Find latest chat for this assistant or prompt a fresh one
+    const matchingConv = conversations.find(
+      (c) => (c.agent_id || 'general-assistant') === agentId,
+    )
+    if (matchingConv) {
+      selectConversation(matchingConv.id)
+    } else if (settings) {
+      const agent = agents.find((a) => a.id === agentId)
+      const providerId = agent?.provider || settings.default_provider || settings.providers[0]?.id
+      if (providerId) {
+        createConversation(
+          providerId,
+          agent?.model || settings.default_model || '',
+          agent?.system_prompt || null,
+          agentId,
+        )
+      }
+    }
+  }
+
+  const handleCreateAssistant = async () => {
+    if (!settings || !newAssistantName.trim()) return
+    const newAgent: AgentConfig = {
+      id: `assistant-${Date.now()}`,
+      name: newAssistantName.trim(),
+      role: newAssistantRole.trim() || 'AI Assistant',
+      description: newAssistantRole.trim() || 'Custom Assistant',
+      system_prompt: newAssistantPrompt.trim(),
+      provider: null,
+      model: null,
+      skills: [],
+      icon: 'bot',
+      enabled: true,
+    }
+    const updated = {
+      ...settings,
+      agents: [...(settings.agents ?? []), newAgent],
+    }
+    await saveSettings(updated)
+    setNewAssistantName('')
+    setNewAssistantRole('')
+    setNewAssistantPrompt('')
+    setAddAssistantOpen(false)
+    handleSwitchAssistant(newAgent.id)
+  }
+
+  const currentAgentId = currentAgent?.id || 'general-assistant'
+
   const filtered = useMemo(
-    () => conversations.filter((c) => c.title.toLowerCase().includes(search.toLowerCase())),
-    [conversations, search],
+    () =>
+      conversations
+        .filter((c) => (c.agent_id || 'general-assistant') === currentAgentId)
+        .filter((c) => c.title.toLowerCase().includes(search.toLowerCase())),
+    [conversations, currentAgentId, search],
   )
-  const grouped = useMemo(() => groupConversations(filtered), [filtered])
 
   const toggleSelectConversation = (id: number) => {
     setSelectedIds((prev) => {
@@ -313,7 +365,6 @@ export function Sidebar({ collapsed, onExpand }: SidebarProps) {
         </button>
       )}
 
-      {/* Main Sidebar - opens only via explicit click/Ctrl+B, not on hover. */}
       <aside
         id="conversation-sidebar"
         className={cn(
@@ -323,47 +374,117 @@ export function Sidebar({ collapsed, onExpand }: SidebarProps) {
             : 'relative w-[272px] shrink-0',
         )}
       >
-        {/* Top Search & Multi-Select Bar */}
-        <div className="p-2 space-y-1.5">
+        {/* Top Add Assistant & Filter Bar */}
+        <div className="p-3 pb-2 space-y-2 border-b border-border/20">
           <div className="flex items-center gap-1.5">
-            <div className="relative flex-1">
-              <SearchIcon className="absolute top-1/2 left-2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search chats..."
-                aria-label="Search chats"
-                className="h-8 pl-7 pr-7 text-xs"
-              />
-              {search && (
-                <button
-                  type="button"
-                  onClick={() => setSearch('')}
-                  aria-label="Clear search"
-                  className="absolute top-1/2 right-2 -translate-y-1/2 cursor-pointer text-muted-foreground hover:text-foreground"
-                >
-                  <XIcon className="size-3.5" />
-                </button>
-              )}
-            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setAddAssistantOpen(true)}
+              className="flex-1 h-8 justify-start gap-1.5 text-xs font-medium text-foreground bg-accent/30 hover:bg-accent border-border/40"
+            >
+              <PlusIcon className="size-3.5" />
+              <span>Add Assistant</span>
+            </Button>
 
             <Button
-              variant={isSelectMode ? 'default' : 'outline'}
+              variant={isSelectMode ? 'default' : 'ghost'}
               size="icon-sm"
               onClick={() => {
                 setIsSelectMode((v) => !v)
                 setSelectedIds(new Set())
               }}
-              className="size-8 shrink-0"
-              title={isSelectMode ? 'Exit select mode' : 'Select multiple chats to delete'}
+              className="size-8 shrink-0 text-muted-foreground hover:text-foreground"
+              title={isSelectMode ? 'Exit select mode' : 'Select multiple chats'}
             >
               <CheckSquareIcon className="size-3.5" />
             </Button>
           </div>
 
+          {/* Active Assistant Accordion/Dropdown Header */}
+          <div className="flex items-center justify-between px-1 py-1">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  className="flex items-center gap-2 text-xs font-semibold text-foreground hover:text-primary transition-colors cursor-pointer group truncate max-w-[190px]"
+                >
+                  <div className="size-5 rounded-md bg-primary/20 flex items-center justify-center shrink-0">
+                    {getAgentIcon(currentAgent?.icon ?? 'bot')}
+                  </div>
+                  <span className="truncate">{currentAgent?.name ?? 'Default Assistant'}</span>
+                  <ChevronDownIcon className="size-3 text-muted-foreground group-hover:text-foreground transition-transform" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-56">
+                {agents.map((agent) => (
+                  <DropdownMenuItem
+                    key={agent.id}
+                    onClick={() => handleSwitchAssistant(agent.id)}
+                    className="flex items-center justify-between cursor-pointer"
+                  >
+                    <div className="flex items-center gap-2 truncate">
+                      {getAgentIcon(agent.icon)}
+                      <span className="truncate text-xs font-medium">{agent.name}</span>
+                    </div>
+                    {agent.id === currentAgent?.id && (
+                      <span className="size-1.5 rounded-full bg-primary" />
+                    )}
+                  </DropdownMenuItem>
+                ))}
+                {onOpenSettings && (
+                  <>
+                    <DropdownMenuItem
+                      onClick={onOpenSettings}
+                      className="text-xs text-primary font-medium cursor-pointer"
+                    >
+                      Manage Assistants...
+                    </DropdownMenuItem>
+                  </>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            <div className="flex items-center gap-1">
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={handleNewChat}
+                className="size-6 text-muted-foreground hover:text-foreground"
+                title="New topic in this assistant"
+              >
+                <MessageSquarePlusIcon className="size-3.5" />
+              </Button>
+            </div>
+          </div>
+        </div>
+
+        {/* Search & Select Bar */}
+        <div className="px-3 pt-2">
+          <div className="relative">
+            <SearchIcon className="absolute top-1/2 left-2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search topics..."
+              aria-label="Search topics"
+              className="h-7 pl-7 pr-7 text-xs bg-accent/20 border-border/40"
+            />
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch('')}
+                aria-label="Clear search"
+                className="absolute top-1/2 right-2 -translate-y-1/2 cursor-pointer text-muted-foreground hover:text-foreground"
+              >
+                <XIcon className="size-3.5" />
+              </button>
+            )}
+          </div>
+
           {/* Multi-Select Action Bar */}
           {isSelectMode && (
-            <div className="flex items-center justify-between rounded-lg bg-accent/40 px-2 py-1 text-xs">
+            <div className="mt-2 flex items-center justify-between rounded-lg bg-accent/40 px-2 py-1 text-xs">
               <span className="text-[11px] font-medium text-foreground">
                 {selectedIds.size} selected
               </span>
@@ -391,43 +512,91 @@ export function Sidebar({ collapsed, onExpand }: SidebarProps) {
           )}
         </div>
 
-        <div aria-label="Conversations" className="flex-1 overflow-y-auto px-2">
-          {grouped.map(([group, items]) => (
-            <div key={group} className="mb-2">
-              <div className="px-3 pb-1 text-[11px] font-medium tracking-wider text-muted-foreground uppercase">
-                {group}
-              </div>
-              <ul>
-                {items.map((conv) => (
-                  <ConversationRow
-                    key={conv.id}
-                    conv={conv}
-                    active={conv.id === activeConversationId}
-                    isSelectMode={isSelectMode}
-                    isSelected={selectedIds.has(conv.id)}
-                    onToggleSelect={() => toggleSelectConversation(conv.id)}
-                    onSelect={() => selectConversation(conv.id)}
-                    onRename={() => openRename(conv.id, conv.title)}
-                    onTogglePin={() => pinConversation(conv.id, !conv.pinned)}
-                    onDelete={() => deleteConversation(conv.id)}
-                  />
-                ))}
-              </ul>
-            </div>
+        {/* Conversations / Topics under this Assistant */}
+        <div aria-label="Conversations" className="flex-1 overflow-y-auto px-2 py-2 space-y-0.5">
+          {filtered.map((conv) => (
+            <ConversationRow
+              key={conv.id}
+              conv={conv}
+              active={conv.id === activeConversationId}
+              isSelectMode={isSelectMode}
+              isSelected={selectedIds.has(conv.id)}
+              onToggleSelect={() => toggleSelectConversation(conv.id)}
+              onSelect={() => selectConversation(conv.id)}
+              onRename={() => openRename(conv.id, conv.title)}
+              onTogglePin={() => pinConversation(conv.id, !conv.pinned)}
+              onDelete={() => deleteConversation(conv.id)}
+            />
           ))}
+
           {filtered.length === 0 && (
-            <div className="px-3 py-4 text-center">
-              <p className="text-[13px] text-muted-foreground">No chats found.</p>
+            <div className="px-3 py-6 text-center">
+              <p className="text-[12px] text-muted-foreground">No chats in this assistant.</p>
               <Button onClick={handleNewChat} variant="ghost" size="sm" className="mt-2 h-7 gap-1 text-xs">
-                <PlusIcon className="size-3.5" /> New chat
+                <PlusIcon className="size-3.5" /> Start new chat
               </Button>
             </div>
           )}
         </div>
 
-        <Button onClick={handleNewChat} variant="outline" className="m-3 h-8 gap-1.5">
-          <PlusIcon className="size-4" /> New chat
-        </Button>
+        {/* Bottom Actions */}
+        <div className="p-2 border-t border-border/20">
+          <Button onClick={handleNewChat} variant="outline" className="w-full h-8 gap-1.5 text-xs">
+            <PlusIcon className="size-3.5" /> New topic
+          </Button>
+        </div>
+
+        {/* Add Assistant Modal */}
+        <Dialog open={addAssistantOpen} onOpenChange={setAddAssistantOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Add Assistant</DialogTitle>
+              <DialogDescription>
+                Create a customized assistant persona with its own instructions and personality.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="flex flex-col gap-3 py-2">
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="assistant-name" className="text-xs">Name</Label>
+                <Input
+                  id="assistant-name"
+                  placeholder="e.g. Code Reviewer, Writing Partner"
+                  value={newAssistantName}
+                  onChange={(e) => setNewAssistantName(e.target.value)}
+                  autoFocus
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="assistant-role" className="text-xs">Role / Description</Label>
+                <Input
+                  id="assistant-role"
+                  placeholder="e.g. Senior Rust Engineer"
+                  value={newAssistantRole}
+                  onChange={(e) => setNewAssistantRole(e.target.value)}
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="assistant-prompt" className="text-xs">System Instructions</Label>
+                <textarea
+                  id="assistant-prompt"
+                  rows={3}
+                  placeholder="You are a helpful assistant specialized in..."
+                  value={newAssistantPrompt}
+                  onChange={(e) => setNewAssistantPrompt(e.target.value)}
+                  className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-xs shadow-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setAddAssistantOpen(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleCreateAssistant} disabled={!newAssistantName.trim()}>
+                Create Assistant
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         {/* Batch Delete Confirmation Modal */}
         <Dialog open={confirmBatchDelete} onOpenChange={setConfirmBatchDelete}>

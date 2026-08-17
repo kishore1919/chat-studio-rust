@@ -10,10 +10,7 @@ import {
   Trash2Icon,
 } from 'lucide-react'
 import { useSettingsStore } from '../store/settings'
-// Static, not dynamic: Settings.tsx is already behind its own `React.lazy`
-// route split, so a further per-call `import()` here buys nothing and only
-// added latency to every color-picker drag tick.
-import { setThemeOverrides, useThemeStore } from '../store/theme'
+import { useThemeStore } from '../store/theme'
 import { ipc } from '../lib/ipc'
 import { useDebouncedCallback } from '../lib/utils'
 import type { ProviderConfig, Settings } from '../lib/types'
@@ -65,7 +62,7 @@ const NAV_GROUPS: { label: string; items: { id: NavSection; label: string }[] }[
       // (both now apply via `set_conversation_system_prompt`). Prompts has
       // no flag - it's a real feature from the start.
       ...(FEATURES.agents ? [{ id: 'agents' as const, label: 'Agents & Assistants' }] : []),
-      ...(FEATURES.skills ? [{ id: 'skills' as const, label: 'Skills & Prompts' }] : []),
+      ...(FEATURES.skills ? [{ id: 'skills' as const, label: 'Skills' }] : []),
       { id: 'prompts', label: 'Prompts' },
       { id: 'mcp', label: 'MCP Servers' },
     ],
@@ -130,14 +127,21 @@ export function Settings({ onBack }: SettingsProps) {
             </div>
           ))}
         </nav>
-        <div className="min-w-0 flex-1 overflow-y-auto p-4">
-          {section === 'model-provider' && <ModelProviderPane />}
-          {section === 'default-model' && <DefaultModelPane />}
-          {section === 'agents' && <AgentsPane />}
-          {section === 'skills' && <SkillsPane />}
-          {section === 'prompts' && <PromptsPane />}
-          {section === 'mcp' && <McpPane />}
-          {section === 'appearance' && <AppearancePane />}
+        <div className="min-w-0 flex-1 overflow-y-auto p-4 md:p-6">
+          {section === 'model-provider' ? (
+            <div className="h-full">
+              <ModelProviderPane />
+            </div>
+          ) : (
+            <div className="mx-auto max-w-3xl h-full">
+              {section === 'default-model' && <DefaultModelPane />}
+              {section === 'agents' && <AgentsPane />}
+              {section === 'skills' && <SkillsPane />}
+              {section === 'prompts' && <PromptsPane />}
+              {section === 'mcp' && <McpPane />}
+              {section === 'appearance' && <AppearancePane />}
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -257,8 +261,10 @@ function ModelProviderPane() {
         </div>
         <AddProviderDialog onAdd={addProvider} />
       </div>
-      <div className="min-w-0 flex-1 overflow-y-auto pl-4">
-        {selected ? <ProviderDetail provider={selected} /> : <p className="text-muted-foreground text-xs">No provider selected</p>}
+      <div className="min-w-0 flex-1 overflow-y-auto px-6">
+        <div className="mx-auto max-w-2xl">
+          {selected ? <ProviderDetail provider={selected} /> : <p className="text-muted-foreground text-xs">No provider selected</p>}
+        </div>
       </div>
     </div>
   )
@@ -341,7 +347,7 @@ function ProviderDetail({ provider }: { provider: ProviderConfig }) {
   }
 
   return (
-    <div className="max-w-xl space-y-4">
+    <div className="w-full space-y-4">
       <div className="flex items-center justify-between border-b border-border pb-3">
         <div>
           <h2 className="text-base font-semibold text-foreground">{provider.display_name}</h2>
@@ -583,79 +589,23 @@ function DefaultModelPane() {
   )
 }
 
-function ThemePreviewCard({
-  meta,
-  active,
-  onSelect,
-  onDelete,
-}: {
-  meta: import('../lib/themes/types').ThemeMeta
-  active: boolean
-  onSelect: () => void
-  onDelete: () => void
-}) {
-  const [vars, setVars] = useState<Record<string, string> | null>(null)
-  useEffect(() => {
-    let cancelled = false
-    void (async () => {
-      const { getTheme } = await import('../lib/themes/registry')
-      const t = await getTheme(meta.id)
-      if (!cancelled && t) setVars(t.vars)
-    })()
-    return () => { cancelled = true }
-  }, [meta.id])
-  if (!vars) {
-    return (
-      <div className="h-[88px] animate-pulse rounded-lg border border-border bg-muted" />
-    )
-  }
-  const bubbleUser = vars['--bubble-user'] || vars['--bg-hover']
-  const bubbleAssistant = vars['--bg-elevated'] || vars['--bg']
-  return (
-    <button
-      type="button"
-      onClick={onSelect}
-      className={`group relative flex flex-col overflow-hidden rounded-lg border text-left transition ${active ? 'border-primary ring-1 ring-primary' : 'border-border hover:border-border-strong'}`}
-    >
-      <div className="flex h-14 items-center gap-2 p-2" style={{ background: vars['--bg-sidebar'] }}>
-        <span className="flex flex-col gap-1">
-          <span className="block h-2.5 w-8 rounded-full border" style={{ background: bubbleUser, borderColor: vars['--border'] }} title="user bubble" />
-          <span className="block h-2.5 w-10 rounded-full border" style={{ background: bubbleAssistant, borderColor: vars['--border'] }} title="assistant bubble" />
-        </span>
-        <span className="size-3 rounded-full border" style={{ background: vars['--accent'], borderColor: vars['--border'] }} title="accent" />
-        <span className="size-3 rounded-full border" style={{ background: vars['--bg'], borderColor: vars['--border'] }} title="bg" />
-        <span className="ml-auto rounded px-1 py-0.5 font-mono text-[8px]" style={{ background: vars['--bg-elevated'], color: vars['--text-muted'] }}>{meta.type}</span>
-      </div>
-      <div className="flex items-center justify-between bg-card px-2.5 py-2">
-        <div className="min-w-0">
-          <div className="truncate text-xs font-medium text-foreground">{meta.name}</div>
-          <div className="truncate font-mono text-[10px] text-muted-foreground">{meta.id}{meta.builtin ? '' : ' · custom'}</div>
-        </div>
-        {active && <span className="ml-2 shrink-0 text-primary">✓</span>}
-      </div>
-      {!meta.builtin && (
-        <span
-          role="button"
-          tabIndex={0}
-          onClick={(e) => { e.stopPropagation(); void onDelete() }}
-          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); void onDelete() } }}
-          className="absolute right-1 top-1 cursor-pointer rounded bg-background/90 px-1 py-0.5 text-[10px] text-muted-foreground opacity-0 hover:text-destructive group-hover:opacity-100"
-        >
-          Delete
-        </span>
-      )}
-    </button>
-  )
-}
+
+const THEME_OPTIONS = [
+  { id: 'light' as const, label: 'Light' },
+  { id: 'dark' as const, label: 'Dark' },
+  { id: 'system' as const, label: 'System' },
+]
+
+// First entry is the palette's own default green - kept here (rather than
+// just relying on "Reset") so it still shows as a selectable, highlighted
+// swatch when no override is set.
+const ACCENT_SWATCHES = ['#3fd55a', '#2461e9', '#f04546', '#f59f05', '#66df7e']
 
 function AppearancePane() {
   const settings = useSettingsStore((s) => s.settings)
   const save = useSettingsStore((s) => s.save)
   const setLocalSettings = useSettingsStore((s) => s.setLocalSettings)
-  const themeId = useSettingsStore((s) => s.settings?.theme_id ?? 'system')
-  const [metas, setMetas] = useState<import('../lib/themes/types').ThemeMeta[]>([])
-  const [importing, setImporting] = useState(false)
-  const fileInputRef = useRef<HTMLInputElement>(null)
+  const themeId = useThemeStore((s) => s.themeId)
 
   // Applies on every tick for responsiveness; only the IPC write collapses to
   // the last value once the drag/slide stops for 250ms. Without this, a drag
@@ -669,65 +619,14 @@ function AppearancePane() {
     debouncedPersist(next)
   }
 
-  const refreshMetas = async () => {
-    const { listAllMetas } = await import('../lib/themes/registry')
-    setMetas(await listAllMetas())
-  }
-
-  useEffect(() => {
-    void refreshMetas()
-  }, [])
-
-  const handleSelect = async (id: string) => {
-    await useThemeStore.getState().setThemeId(id)
+  const handleSelect = async (id: 'light' | 'dark' | 'system') => {
+    useThemeStore.getState().setThemeId(id)
     if (settings) await save({ ...settings, theme_id: id })
-    await refreshMetas()
   }
 
-  // No dialog/fs plugin: the capability file grants neither `fs:` nor
-  // `dialog:` permissions, so the previous plugin-based picker already
-  // failed its permission check at runtime. A native file input needs no
-  // Tauri permissions at all and gets the browsing UI for free.
-  const handleImportFile = async (file: File) => {
-    const { invoke } = await import('@tauri-apps/api/core')
-    const { toast } = await import('sonner')
-    setImporting(true)
-    try {
-      const raw = await file.text()
-      const parsed = JSON.parse(raw)
-      const base = file.name.replace(/\.json$/i, '') || parsed.name || 'custom'
-      const meta = await invoke<import('../lib/themes/types').ThemeMeta>('import_theme_content', {
-        themeId: base,
-        content: raw,
-        overwrite: false,
-      })
-      toast.success(`Imported ${meta.name}`)
-      await handleSelect(meta.id)
-    } catch (e) {
-      toast.error(String(e))
-    } finally {
-      setImporting(false)
-    }
-  }
-
-  const handleDelete = async (id: string) => {
-    const { invoke } = await import('@tauri-apps/api/core')
-    const { toast } = await import('sonner')
-    try {
-      await invoke('delete_custom_theme', { themeId: id })
-      const { clearCache } = await import('../lib/themes/registry')
-      clearCache(id)
-      toast.success('Theme deleted')
-      if (themeId === id) await handleSelect('system')
-      else await refreshMetas()
-    } catch (e) {
-      toast.error(String(e))
-    }
-  }
-
-  const handleOpenFolder = async () => {
-    const { invoke } = await import('@tauri-apps/api/core')
-    await invoke('open_themes_dir').catch(() => {})
+  const handleAccentChange = async (accent: string | null) => {
+    useThemeStore.getState().setAccent(accent)
+    await save({ ...settings!, accent })
   }
 
   if (!settings) return null
@@ -738,123 +637,50 @@ function AppearancePane() {
 
       <div>
         <Label className="mb-2 block text-xs font-medium text-foreground">Theme</Label>
-        <p className="mb-3 text-[11px] text-muted-foreground">
-          VS Code-style themes. App chrome and code highlighting use the same theme. Import any VS Code marketplace .json.
-        </p>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-          {metas.map((m) => {
-            const active = themeId === m.id
-            return (
-              <ThemePreviewCard
-                key={m.id}
-                meta={m}
-                active={active}
-                onSelect={() => handleSelect(m.id)}
-                onDelete={() => handleDelete(m.id)}
-              />
-            )
-          })}
-        </div>
-        <div className="mt-3 flex flex-wrap gap-2">
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".json,application/json"
-            className="hidden"
-            onChange={(e) => {
-              const file = e.target.files?.[0]
-              e.target.value = ''
-              if (file) void handleImportFile(file)
-            }}
-          />
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-7 gap-1.5 text-xs"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={importing}
-          >
-            <PlusIcon className="size-3.5" /> {importing ? 'Importing…' : 'Import .json'}
-          </Button>
-          <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => void handleOpenFolder()}>
-            Open themes folder
-          </Button>
-          <Button
-            variant={themeId === 'system' ? 'default' : 'outline'}
-            size="sm"
-            className="h-7 text-xs"
-            onClick={() => void handleSelect('system')}
-          >
-            System
-          </Button>
+        <div className="flex gap-1.5">
+          {THEME_OPTIONS.map((opt) => (
+            <Button
+              key={opt.id}
+              variant={themeId === opt.id ? 'default' : 'outline'}
+              size="sm"
+              className="h-7 flex-1 text-xs"
+              onClick={() => void handleSelect(opt.id)}
+            >
+              {opt.label}
+            </Button>
+          ))}
         </div>
       </div>
 
-      <div className="space-y-3 rounded-lg border border-border/60 bg-card p-3">
-        <div className="flex items-center justify-between">
-          <Label className="text-xs font-medium text-foreground">Accent</Label>
-          <div className="flex items-center gap-2">
-            <input
-              type="color"
-              value={settings.accent || '#007acc'}
-              onChange={(e) => {
-                const accent = e.target.value
-                setThemeOverrides({ accent })
-                applyLive({ ...settings, accent })
-              }}
-              className="size-7 cursor-pointer rounded border border-border bg-transparent p-0"
-              title="Pick accent color"
-            />
-            {settings.accent && (
-              <Button variant="ghost" size="sm" className="h-7 text-[11px]" onClick={async () => {
-                setThemeOverrides({ accent: null })
-                await save({ ...settings, accent: null })
-              }}>
-                Reset
-              </Button>
-            )}
-          </div>
-        </div>
-        <p className="text-[11px] text-muted-foreground">Overrides the theme's accent (buttons, links, highlights). Clear to use theme default.</p>
-        <div className="flex flex-wrap gap-1.5">
-          {['#007acc', '#0e639c', '#16825d', '#d83b01', '#a4262c', '#8764b8', '#038387', '#c19c00'].map((c) => (
+      <div className="flex items-center justify-between rounded-lg border border-border/60 bg-card p-3">
+        <Label className="text-xs font-medium text-foreground">Accent</Label>
+        <div className="flex items-center gap-2">
+          {ACCENT_SWATCHES.map((c) => (
             <button
               key={c}
               type="button"
-              onClick={async () => {
-                setThemeOverrides({ accent: c })
-                await save({ ...settings, accent: c })
-              }}
-              className={`size-6 rounded-full border-2 transition ${settings.accent === c ? 'border-foreground scale-110' : 'border-border'}`}
+              onClick={() => void handleAccentChange(c)}
+              className={`size-6 shrink-0 rounded-full border-2 transition ${settings.accent === c || (!settings.accent && c === '#3fd55a') ? 'border-foreground scale-110' : 'border-border'}`}
               style={{ background: c }}
               title={c}
             />
           ))}
-        </div>
-      </div>
-
-      <div className="space-y-2 rounded-lg border border-border/60 bg-card p-3">
-        <div className="flex items-center justify-between">
-          <Label className="text-xs font-medium text-foreground">Lines / borders</Label>
-          <span className="text-[11px] text-muted-foreground capitalize">{settings.border_visibility}</span>
-        </div>
-        <div className="flex gap-1.5">
-          {(['hidden', 'soft', 'subtle', 'strong'] as const).map((v) => (
-            <Button
-              key={v}
-              variant={settings.border_visibility === v ? 'default' : 'outline'}
-              size="sm"
-              className="h-7 flex-1 capitalize text-xs"
-              onClick={async () => {
-                setThemeOverrides({ borderVisibility: v })
-                await save({ ...settings, border_visibility: v })
-              }}
-            >
-              {v}
+          <input
+            type="color"
+            value={settings.accent || '#3fd55a'}
+            onChange={(e) => void handleAccentChange(e.target.value)}
+            className="size-6 shrink-0 cursor-pointer rounded-full border border-border bg-transparent p-0"
+            title="Pick accent color"
+          />
+          <span className="w-16 shrink-0 rounded border border-border/60 bg-background px-1.5 py-1 text-center font-mono text-[11px] text-muted-foreground uppercase">
+            {settings.accent || '#3fd55a'}
+          </span>
+          {settings.accent && (
+            <Button variant="ghost" size="sm" className="h-6 shrink-0 text-[11px]" onClick={() => void handleAccentChange(null)}>
+              Reset
             </Button>
-          ))}
+          )}
         </div>
-        <p className="text-[11px] text-muted-foreground">Controls how visible dividers and card borders are.</p>
       </div>
 
       <div>
@@ -878,7 +704,7 @@ function AppearancePane() {
               value={settings.font_size}
               onChange={(e) => {
                 const font_size = Number(e.target.value)
-                setThemeOverrides({ fontSize: font_size })
+                useThemeStore.getState().setFontSize(font_size)
                 applyLive({ ...settings, font_size })
               }}
               className="relative w-full appearance-none bg-transparent h-5 cursor-pointer [&::-webkit-slider-runnable-track]:h-1.5 [&::-webkit-slider-runnable-track]:rounded-full [&::-moz-range-track]:h-1.5 [&::-moz-range-track]:rounded-full [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:size-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-background [&::-webkit-slider-thumb]:shadow-sm [&::-webkit-slider-thumb]:-mt-[5px] [&::-moz-range-thumb]:size-4 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-primary [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-background [&::-moz-range-thumb]:shadow-sm"
@@ -888,7 +714,7 @@ function AppearancePane() {
         </div>
         <div className="mt-1 flex justify-between text-[11px] text-muted-foreground">
           <span>12</span>
-          <span className={`transition-colors ${settings.font_size === 14 ? 'font-medium text-primary' : ''}`}>Default (14)</span>
+          <span className={`transition-colors ${settings.font_size === 16 ? 'font-medium text-primary' : ''}`}>Default (16)</span>
           <span>18</span>
         </div>
       </div>

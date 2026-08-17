@@ -94,6 +94,7 @@ export interface Conversation {
   provider: string
   model: string
   system_prompt: string | null
+  agent_id?: string | null
   pinned: boolean
   created_at: number
   updated_at: number

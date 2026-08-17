@@ -29,7 +29,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     set({ loading: true })
     const settings = await ipc.getSettings()
     set({ settings, loading: false })
-    syncThemeFromSettings(settings.theme_id, settings.accent ?? null, settings.border_visibility || 'subtle', settings.font_size)
+    syncThemeFromSettings(settings.theme_id, settings.accent ?? null, settings.font_size)
   },
 
   save: async (next) => {

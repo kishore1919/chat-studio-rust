@@ -62,7 +62,11 @@ export function Chat({ onOpenSettings }: ChatProps) {
 
   return (
     <div className="flex h-full w-full overflow-hidden bg-background">
-      <Sidebar collapsed={sidebarCollapsed} onExpand={() => setSidebarCollapsed(false)} />
+      <Sidebar
+        collapsed={sidebarCollapsed}
+        onExpand={() => setSidebarCollapsed(false)}
+        onOpenSettings={onOpenSettings}
+      />
       <div className="relative flex min-w-0 flex-1 flex-col overflow-hidden">
         <ChatHeader
           onToggleSidebar={() => setSidebarCollapsed((v) => !v)}

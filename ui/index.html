@@ -6,17 +6,16 @@
     <title>Chat Studio</title>
     <script>
       (function () {
-        var id = localStorage.getItem('chat-studio-theme-id')
-        if (!id) {
-          var legacy = localStorage.getItem('chat-studio-theme') || 'system'
-          if (legacy === 'light') id = 'light-modern'
-          else if (legacy === 'dark') id = 'dark-modern'
-          else id = legacy
-        }
-        var lightIds = { 'light-modern': 1, 'solarized-light': 1 }
-        var resolved = id === 'system'
-          ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
-          : (lightIds[id] ? 'light' : 'dark')
+        // Older installs may still have a VS Code-style id here (e.g.
+        // 'dark-modern', 'solarized-light') from before the theme system was
+        // simplified to Cherry Studio-style light/dark - bucket by prefix
+        // rather than assume 'system', so a pre-existing dark preference
+        // doesn't flash light for one frame.
+        var id = localStorage.getItem('chat-studio-theme-id') || localStorage.getItem('chat-studio-theme') || 'system'
+        var resolved
+        if (id === 'light' || id === 'dark') resolved = id
+        else if (id === 'system') resolved = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+        else resolved = (id.indexOf('light') === 0 || id === 'solarized-light') ? 'light' : 'dark'
         document.documentElement.dataset.theme = resolved
       })()
     </script>
