@@ -1,4 +1,4 @@
-import { type ReactNode } from 'react'
+import { type ReactNode, useMemo } from 'react'
 import { CheckIcon, CopyIcon } from 'lucide-react'
 import { cn } from '../lib/utils'
 import { useCopyFeedback } from '../lib/useCopyFeedback'
@@ -6,6 +6,7 @@ import { useCopyFeedback } from '../lib/useCopyFeedback'
 interface CodeBlockProps {
   className?: string
   children: ReactNode
+  showLineNumbers?: boolean
 }
 
 function getNodeText(node: ReactNode): string {
@@ -22,59 +23,58 @@ function getNodeText(node: ReactNode): string {
   return ''
 }
 
-/** Fenced code block renderer used by MarkdownContent, with syntax highlighting and copy button. */
-export function CodeBlock({ className, children }: CodeBlockProps) {
+export function CodeBlock({ className, children, showLineNumbers = true }: CodeBlockProps) {
   const [copied, copy] = useCopyFeedback()
 
   const languageMatch = className?.match(/language-([a-zA-Z0-9_+#.-]+)/)
-  const language = languageMatch
-    ? languageMatch[1]
-    : className?.replace('hljs', '').trim() || 'code'
+  const language = (languageMatch ? languageMatch[1] : className?.replace('hljs', '').trim()) || 'code'
 
-  const handleCopy = () => copy(getNodeText(children).replace(/\n$/, ''))
+  const rawText = useMemo(() => getNodeText(children).replace(/\n$/, ''), [children])
+  const lineCount = useMemo(() => rawText.split('\n').length, [rawText])
+
+  const handleCopy = () => copy(rawText)
 
   return (
-    // Fixed GitHub Dark colors, not the app's theme tokens - a code block
-    // should look the same and stay legible regardless of whether the app
-    // itself is in light or dark mode.
-    <div
-      className="group relative my-3 overflow-hidden rounded-xl border shadow-sm"
-      style={{ background: 'var(--code-bg)', borderColor: 'var(--code-border)', color: 'var(--code-fg)' }}
-    >
-      <div
-        className="flex items-center justify-between border-b px-3 py-1.5 text-xs select-none"
-        style={{ borderColor: 'var(--code-border)', background: 'var(--code-header-bg)' }}
-      >
-        <span
-          className="font-mono text-[11px] font-semibold lowercase"
-          style={{ color: 'var(--hljs-function)' }}
-        >
+    <div className="group relative my-4 overflow-hidden rounded-xl border border-neutral-800/80 bg-[#121417] shadow-lg">
+      {/* Header bar */}
+      <div className="flex items-center justify-between border-b border-neutral-800/80 bg-[#181b20] px-4 py-2 text-xs select-none">
+        <span className="font-mono text-xs font-semibold tracking-wider text-neutral-400 uppercase">
           {language}
         </span>
         <button
           type="button"
           onClick={handleCopy}
           aria-label={copied ? 'Copied' : 'Copy code'}
-          className="flex cursor-pointer items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-medium transition-colors hover:bg-white/10"
-          style={{ color: copied ? 'var(--hljs-tag)' : 'var(--code-muted)' }}
+          className="flex cursor-pointer items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium text-neutral-400 transition-colors hover:bg-neutral-800 hover:text-neutral-200"
           title="Copy code"
         >
           {copied ? (
             <>
-              <CheckIcon className="size-3" />
-              <span className="font-medium">Copied</span>
+              <CheckIcon className="size-3.5 text-emerald-400" />
+              <span className="text-emerald-400">Copied</span>
             </>
           ) : (
             <>
-              <CopyIcon className="size-3" />
+              <CopyIcon className="size-3.5" />
               <span>Copy</span>
             </>
           )}
         </button>
       </div>
-      <pre className="hljs overflow-x-auto p-3.5 text-[13px] leading-relaxed font-mono bg-transparent">
-        <code className={cn('hljs', className, 'bg-transparent block')}>{children}</code>
-      </pre>
+
+      {/* Code with Line Numbers */}
+      <div className="flex overflow-x-auto p-4 text-[13px] leading-6 font-mono">
+        {showLineNumbers && (
+          <div className="flex flex-col select-none pr-4 text-right text-neutral-600">
+            {Array.from({ length: lineCount }, (_, i) => (
+              <span key={i + 1}>{i + 1}</span>
+            ))}
+          </div>
+        )}
+        <pre className="flex-1 bg-transparent p-0">
+          <code className={cn('block bg-transparent', className)}>{children}</code>
+        </pre>
+      </div>
     </div>
   )
 }
