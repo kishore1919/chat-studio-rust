@@ -4,37 +4,72 @@ on:
   push:
     branches: [main]
   pull_request:
+    branches: [main]
 
-# The MSVC toolchain is required (rusqlite's bundled sqlite3 and reqwest's
-# rustls-tls both link against it on Windows), so this must run on
-# windows-latest rather than the cheaper ubuntu-latest.
+env:
+  CARGO_TERM_COLOR: always
+
 jobs:
-  check:
-    runs-on: windows-latest
-    defaults:
-      run:
-        shell: bash
+  fmt-check:
+    name: Format Check (Rust)
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@stable
         with:
-          components: clippy,rustfmt
+          components: rustfmt
+      - run: cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
 
-      - name: Cache Rust build artifacts
-        uses: Swatinem/rust-cache@v2
+  clippy:
+    name: Clippy (Rust)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
         with:
-          workspaces: src-tauri
+          components: clippy
+      - run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
 
-      - name: Install bun
-        uses: oven-sh/setup-bun@v2
+  test:
+    name: Tests (Rust)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install SQLite dev headers
+        run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev
+      - run: cargo test --manifest-path src-tauri/Cargo.toml
 
-      - name: Install JS dependencies
-        run: make install
+  typecheck:
+    name: Type Check (Frontend)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v1
+      - run: cd ui && bun install --frozen-lockfile
+      - run: cd ui && bun x tsc -b
 
-      - name: Backend checks (fmt, clippy, tests)
-        run: make fmt-check clippy test
+  lint:
+    name: Lint (Frontend)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v1
+      - run: cd ui && bun install --frozen-lockfile
+      - run: cd ui && bun run lint
 
-      - name: Frontend checks (typecheck, lint)
-        run: cd ui && bun x tsc -b && bun run lint
+  build-frontend:
+    name: Build Frontend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v1
+      - run: cd ui && bun install --frozen-lockfile
+      - run: cd ui && bun run build
+
+  check:
+    name: All Checks Passed
+    needs: [fmt-check, clippy, test, typecheck, lint, build-frontend]
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "All checks passed!"

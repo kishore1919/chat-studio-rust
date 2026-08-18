@@ -2,7 +2,7 @@
 // Keep field names/casing in sync - commands.rs serializes with serde's
 // default camelCase-free (snake_case) representation, matched here verbatim.
 
-export type Dialect = 'openai_compat' | 'ollama'
+export type Dialect = 'openai_compat' | 'ollama' | 'anthropic' | 'gemini' | 'openai'
 
 export interface ProviderConfig {
   id: string
@@ -102,6 +102,8 @@ export interface Conversation {
 
 export type Role = 'user' | 'assistant' | 'system'
 
+export type ContextFlag = 'normal' | 'pinned' | 'excluded'
+
 export interface Message {
   id: number
   conversation_id: number
@@ -114,6 +116,14 @@ export interface Message {
   tokens_in: number | null
   tokens_out: number | null
   created_at: number
+  context_flag: ContextFlag
+}
+
+/** Snapshot of how full the context window is; optionally includes an unsent draft. */
+export interface ContextUsage {
+  used_tokens: number
+  budget_tokens: number
+  dropped_count: number
 }
 
 export interface ModelInfo {

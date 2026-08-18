@@ -1,4 +1,7 @@
+pub mod anthropic;
+pub mod gemini;
 pub mod ollama;
+pub mod openai;
 pub mod openai_compat;
 
 use crate::config::{Dialect, ProviderConfig};
@@ -102,6 +105,9 @@ pub fn build_provider(http: &reqwest::Client, cfg: &ProviderConfig) -> Box<dyn P
     match cfg.dialect {
         Dialect::OpenaiCompat => Box::new(openai_compat::OpenAiCompatProvider::new(http, cfg)),
         Dialect::Ollama => Box::new(ollama::OllamaProvider::new(http, cfg)),
+        Dialect::Anthropic => Box::new(anthropic::AnthropicProvider::new(http, cfg)),
+        Dialect::Gemini => Box::new(gemini::GeminiProvider::new(http, cfg)),
+        Dialect::Openai => Box::new(openai::OpenaiProvider::new(http, cfg)),
     }
 }
 

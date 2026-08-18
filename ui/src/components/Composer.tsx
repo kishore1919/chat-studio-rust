@@ -2,7 +2,8 @@ import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { ArrowUpIcon, ChevronDownIcon, ClockIcon, MessageSquarePlusIcon, SquareIcon } from 'lucide-react'
 import { useChatStore } from '../store/chat'
 import { useSettingsStore } from '../store/settings'
-import type { PromptTemplate, Skill } from '../lib/types'
+import { ipc } from '../lib/ipc'
+import type { ContextUsage, PromptTemplate, Skill } from '../lib/types'
 import { FEATURES } from '../lib/features'
 import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
@@ -12,7 +13,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { cn } from '@/lib/utils'
+import { cn, useDebouncedCallback } from '@/lib/utils'
 
 const MIN_TEXTAREA_HEIGHT_PX = 24
 const MAX_TEXTAREA_HEIGHT_PX = 180
@@ -44,6 +45,23 @@ export function Composer() {
   const activeConversationId = useChatStore((s) => s.activeConversationId)
   const settings = useSettingsStore((s) => s.settings)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const [contextUsage, setContextUsage] = useState<ContextUsage | null>(null)
+
+  const refreshContextUsage = useDebouncedCallback((conversationId: number, draft: string) => {
+    ipc
+      .getContextUsage(conversationId, draft)
+      .then(setContextUsage)
+      .catch(() => {})
+  }, 250)
+
+  useEffect(() => {
+    if (activeConversationId === null) {
+      setContextUsage(null)
+      return
+    }
+    refreshContextUsage(activeConversationId, text)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeConversationId, text])
 
   const handleNewChat = () => {
     if (!settings) return
@@ -403,8 +421,40 @@ export function Composer() {
               )}
             </div>
           </div>
+
+          {contextUsage && contextUsage.budget_tokens > 0 ? (
+            <ContextMeter usage={contextUsage} />
+          ) : null}
         </div>
       </div>
+    </div>
+  )
+}
+
+/** Live estimate of how full the conversation's context window is, including
+ * the current draft. Not an exact token count - see `context.rs`. */
+function ContextMeter({ usage }: { usage: ContextUsage }) {
+  const ratio = Math.min(1, usage.used_tokens / usage.budget_tokens)
+  const pct = Math.round(ratio * 100)
+  return (
+    <div className="flex items-center gap-2 px-0.5 text-[10px] text-muted-foreground">
+      <div className="h-1 flex-1 overflow-hidden rounded-full bg-muted">
+        <div
+          className={cn(
+            'h-full rounded-full transition-[width]',
+            ratio >= 1 ? 'bg-destructive' : ratio >= 0.8 ? 'bg-amber-500' : 'bg-primary/60',
+          )}
+          style={{ width: `${Math.max(2, pct)}%` }}
+        />
+      </div>
+      <span className="tabular-nums">
+        {usage.used_tokens.toLocaleString()} / {usage.budget_tokens.toLocaleString()} tokens
+      </span>
+      {usage.dropped_count > 0 ? (
+        <span title="Earlier messages excluded from this request">
+          · {usage.dropped_count} not sent
+        </span>
+      ) : null}
     </div>
   )
 }

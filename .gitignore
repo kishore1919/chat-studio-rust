@@ -1,12 +1,56 @@
-/target
-/src-tauri/target
-/src-tauri/gen
+# Rust
+/target/
+**/*.rs.bk
+Cargo.lock
 
-node_modules
-/ui/dist
-/ui/node_modules
+# Tauri
+src-tauri/target/
+src-tauri/**/*.rs.bk
 
-# local app data written at runtime, never source
-*.db
-*.db-wal
-*.db-shm
+# Frontend (Bun/Vite)
+ui/node_modules/
+ui/dist/
+ui/.vite/
+ui/*.local
+
+# IDE/Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# OS
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Logs
+*.log
+logs/
+src-tauri/logs/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Test coverage
+coverage/
+*.lcov
+
+# Bundle outputs
+src-tauri/target/release/bundle/
+
+# Temporary files
+*.tmp
+*.temp
+tmp/
+temp/
+
+# AI Coding Agents
+.cursorignore
+.codeiumignore
+.vscodeignore
+.windsurfignore

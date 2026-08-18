@@ -1,8 +1,8 @@
 use crate::config::{self, ProviderConfig, Settings};
+use crate::context;
 use crate::db;
 use crate::providers::{
-    build_provider, ChatMessage, ChatRequest, ModelInfo, ProviderError, ProviderEvent, StreamEvent,
-    Usage,
+    build_provider, ChatRequest, ModelInfo, ProviderError, ProviderEvent, StreamEvent, Usage,
 };
 use crate::state::{AppState, ModelCacheEntry};
 use serde::Serialize;
@@ -434,47 +434,22 @@ pub async fn cancel_stream(state: State<'_, AppState>, stream_id: String) -> Res
     Ok(())
 }
 
-/// Deliberately pessimistic proxy for tokens - no tokenizer is bundled, and
-/// shipping BPE tables per model family would cost more than a conservative
-/// estimate. Undercounting drops one extra old turn rather than overshooting
-/// a provider's real limit.
-const CHARS_PER_TOKEN: usize = 3;
-/// Reserved out of the budget for the model's own reply.
-const RESPONSE_RESERVE_TOKENS: u32 = 4096;
 /// Upper bound on how many rows even leave the database, regardless of
 /// `context_tokens` - a very short-message conversation shouldn't force a
 /// several-hundred-row scan just because it's cheap in characters.
 const HISTORY_ROW_CAP: i64 = 400;
 
-/// Walks history backwards (newest-first, as `get_context_messages` returns
-/// it) under a character budget, then reverses back to chronological order.
-/// Pure so it's independently testable. Always keeps the most recent turn
-/// (index 0) even if it alone exceeds budget - a request with no question in
-/// it is worse than one that's over budget.
-fn budget_history(newest_first: &[db::ContextRow], context_tokens: u32) -> Vec<ChatMessage> {
-    let budget_chars = context_tokens
-        .saturating_sub(RESPONSE_RESERVE_TOKENS)
-        .saturating_mul(CHARS_PER_TOKEN as u32) as usize;
-
-    let mut kept = Vec::new();
-    let mut used = 0usize;
-    for (i, row) in newest_first.iter().enumerate() {
-        let cost = row.content.len();
-        if i == 0 || used.saturating_add(cost) <= budget_chars {
-            kept.push(row);
-            used += cost;
-        } else {
-            break;
-        }
-    }
-
-    kept.into_iter()
-        .rev()
-        .map(|r| ChatMessage {
-            role: r.role.clone(),
-            content: r.content.clone(),
-        })
-        .collect()
+/// Resolves the system prompt for a conversation: its own prompt (set via a
+/// skill, or by hand) wins; the global default in Settings only applies when
+/// the conversation has none.
+fn resolve_system_prompt(
+    conversation: &db::Conversation,
+    global_system_prompt: Option<&str>,
+) -> Option<String> {
+    conversation
+        .system_prompt
+        .clone()
+        .or_else(|| global_system_prompt.map(String::from))
 }
 
 /// Loads history + resolves the provider config for a conversation. Kept
@@ -500,32 +475,82 @@ fn prepare_chat(
     let settings = state.settings();
     let provider_cfg = find_provider(&settings, &conversation.provider)?;
     let context_tokens = settings.context_tokens;
-    let global_system_prompt = settings.system_prompt.clone();
+    let system_prompt = resolve_system_prompt(&conversation, settings.system_prompt.as_deref());
     drop(settings);
 
-    let mut messages: Vec<ChatMessage> = Vec::new();
-    // The conversation's own prompt (set via a skill, or by hand) wins; the
-    // global default in Settings only applies when the conversation has none.
-    if let Some(system_prompt) = conversation
-        .system_prompt
-        .as_ref()
-        .or(global_system_prompt.as_ref())
-    {
-        messages.push(ChatMessage {
-            role: "system".into(),
-            content: system_prompt.clone(),
-        });
-    }
-    messages.extend(budget_history(&history, context_tokens));
+    let plan = context::plan_context(&history, system_prompt.as_deref(), context_tokens);
 
     Ok((
         provider_cfg,
         ChatRequest {
             model: conversation.model,
-            messages,
+            messages: plan.messages,
             reasoning_effort,
         },
     ))
+}
+
+/// Snapshot of how full the context window is for a conversation, optionally
+/// including an unsent draft as a trailing user turn - lets the composer show
+/// a live meter before the message is actually persisted and sent.
+#[derive(Serialize)]
+pub struct ContextUsage {
+    pub used_tokens: u32,
+    pub budget_tokens: u32,
+    pub dropped_count: usize,
+}
+
+#[tauri::command]
+pub async fn get_context_usage(
+    state: State<'_, AppState>,
+    conversation_id: i64,
+    draft: Option<String>,
+) -> Result<ContextUsage, String> {
+    let conn = state.db();
+    let conversation = db::get_conversation(&conn, conversation_id)
+        .map_err(db_err)?
+        .ok_or_else(|| "conversation not found".to_string())?;
+    let mut history =
+        db::get_context_messages(&conn, conversation_id, HISTORY_ROW_CAP).map_err(db_err)?;
+    drop(conn);
+
+    if let Some(text) = draft.filter(|t| !t.trim().is_empty()) {
+        history.insert(
+            0,
+            db::ContextRow {
+                role: "user".into(),
+                content: text,
+                pinned: false,
+            },
+        );
+    }
+
+    let settings = state.settings();
+    let context_tokens = settings.context_tokens;
+    let system_prompt = resolve_system_prompt(&conversation, settings.system_prompt.as_deref());
+    drop(settings);
+
+    let plan = context::plan_context(&history, system_prompt.as_deref(), context_tokens);
+    Ok(ContextUsage {
+        used_tokens: plan.used_tokens,
+        budget_tokens: plan.budget_tokens,
+        dropped_count: plan.dropped_count,
+    })
+}
+
+/// `flag` must be one of `"normal" | "pinned" | "excluded"`.
+#[tauri::command]
+pub async fn set_message_context_flag(
+    state: State<'_, AppState>,
+    message_id: i64,
+    flag: String,
+) -> Result<(), String> {
+    let message_id = valid_message_id(message_id)?;
+    if !matches!(flag.as_str(), "normal" | "pinned" | "excluded") {
+        return Err(format!("invalid context flag: {flag}"));
+    }
+    let conn = state.db();
+    db::set_message_context_flag(&conn, message_id, &flag).map_err(db_err)
 }
 
 enum Outcome {
@@ -922,53 +947,6 @@ mod tests {
         for id in [0, -1, -1_755_000_000_000, i64::MIN] {
             assert!(valid_message_id(id).is_err(), "should reject {id}");
         }
-    }
-
-    fn row(role: &str, content: &str) -> db::ContextRow {
-        db::ContextRow {
-            role: role.into(),
-            content: content.into(),
-        }
-    }
-
-    #[test]
-    fn budget_history_fits_entirely_under_a_generous_budget() {
-        let newest_first = vec![
-            row("user", "third"),
-            row("assistant", "second"),
-            row("user", "first"),
-        ];
-        let out = budget_history(&newest_first, 32768);
-        let contents: Vec<_> = out.iter().map(|m| m.content.as_str()).collect();
-        assert_eq!(contents, vec!["first", "second", "third"]);
-    }
-
-    #[test]
-    fn budget_history_drops_oldest_rows_first() {
-        // Budget of 4096 reserved tokens + a tiny remainder leaves ~0 budget
-        // chars, so only the always-kept newest turn should survive.
-        let newest_first = vec![
-            row("user", &"y".repeat(100)),
-            row("assistant", &"x".repeat(100)),
-            row("user", &"w".repeat(100)),
-        ];
-        let out = budget_history(&newest_first, RESPONSE_RESERVE_TOKENS + 10);
-        assert_eq!(out.len(), 1);
-        assert_eq!(out[0].content, "y".repeat(100));
-    }
-
-    #[test]
-    fn budget_history_always_keeps_the_newest_turn_even_if_oversized() {
-        let huge = "z".repeat(1_000_000);
-        let newest_first = vec![row("user", &huge)];
-        let out = budget_history(&newest_first, 1);
-        assert_eq!(out.len(), 1);
-        assert_eq!(out[0].content, huge);
-    }
-
-    #[test]
-    fn budget_history_handles_empty_input() {
-        assert!(budget_history(&[], 32768).is_empty());
     }
 
     #[test]

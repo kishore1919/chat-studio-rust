@@ -3,6 +3,7 @@
 
 mod commands;
 mod config;
+mod context;
 mod db;
 mod mcp;
 mod providers;
@@ -172,6 +173,8 @@ fn main() {
             commands::set_conversation_system_prompt,
             commands::edit_message,
             commands::delete_message,
+            commands::get_context_usage,
+            commands::set_message_context_flag,
             commands::send_message,
             commands::retry_message,
             commands::edit_and_resend_message,

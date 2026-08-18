@@ -46,6 +46,7 @@ type NavSection =
   | 'prompts'
   | 'mcp'
   | 'appearance'
+  | 'context'
 
 const NAV_GROUPS: { label: string; items: { id: NavSection; label: string }[] }[] = [
   {
@@ -71,6 +72,7 @@ const NAV_GROUPS: { label: string; items: { id: NavSection; label: string }[] }[
     label: 'Preferences',
     items: [
       { id: 'appearance', label: 'Appearance' },
+      { id: 'context', label: 'Context' },
     ],
   },
 ]
@@ -140,6 +142,7 @@ export function Settings({ onBack }: SettingsProps) {
               {section === 'prompts' && <PromptsPane />}
               {section === 'mcp' && <McpPane />}
               {section === 'appearance' && <AppearancePane />}
+              {section === 'context' && <ContextPane />}
             </div>
           )}
         </div>
@@ -152,13 +155,14 @@ function AddProviderDialog({ onAdd }: { onAdd: (provider: ProviderConfig) => voi
   const [open, setOpen] = useState(false)
   const [name, setName] = useState('')
   const [baseUrl, setBaseUrl] = useState('')
+  const [dialect, setDialect] = useState<ProviderConfig['dialect']>('openai_compat')
 
   const handleAdd = () => {
     if (!name.trim() || !baseUrl.trim()) return
     onAdd({
       id: name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
       display_name: name.trim(),
-      dialect: 'openai_compat',
+      dialect,
       base_url: baseUrl.trim(),
       api_key: '',
       enabled: true,
@@ -168,6 +172,7 @@ function AddProviderDialog({ onAdd }: { onAdd: (provider: ProviderConfig) => voi
     })
     setName('')
     setBaseUrl('')
+    setDialect('openai_compat')
     setOpen(false)
   }
 
@@ -192,6 +197,19 @@ function AddProviderDialog({ onAdd }: { onAdd: (provider: ProviderConfig) => voi
             />
           </div>
           <div className="flex flex-col gap-1.5">
+            <Label className="text-xs">Dialect</Label>
+            <Select value={dialect} onValueChange={(v) => setDialect(v as ProviderConfig['dialect'])}>
+              <SelectTrigger className="w-full text-xs"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="openai_compat">OpenAI Compatible</SelectItem>
+                <SelectItem value="openai">OpenAI</SelectItem>
+                <SelectItem value="anthropic">Anthropic</SelectItem>
+                <SelectItem value="gemini">Gemini</SelectItem>
+                <SelectItem value="ollama">Ollama</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex flex-col gap-1.5">
             <Label htmlFor="provider-url" className="text-xs">API Base URL</Label>
             <Input
               id="provider-url"
@@ -200,7 +218,6 @@ function AddProviderDialog({ onAdd }: { onAdd: (provider: ProviderConfig) => voi
               placeholder="https://api.example.com/v1"
               onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
             />
-            <p className="text-[11px] text-muted-foreground">Must be an OpenAI-compatible endpoint.</p>
           </div>
         </div>
         <DialogFooter>
@@ -717,6 +734,54 @@ function AppearancePane() {
           <span className={`transition-colors ${settings.font_size === 16 ? 'font-medium text-primary' : ''}`}>Default (16)</span>
           <span>18</span>
         </div>
+      </div>
+    </div>
+  )
+}
+
+function ContextPane() {
+  const settings = useSettingsStore((s) => s.settings)
+  const setLocalSettings = useSettingsStore((s) => s.setLocalSettings)
+
+  const debouncedPersist = useDebouncedCallback((next: Settings) => {
+    void ipc.saveSettings(next)
+  }, 250)
+  const applyLive = (next: Settings) => {
+    setLocalSettings(next)
+    debouncedPersist(next)
+  }
+
+  if (!settings) return null
+
+  return (
+    <div className="max-w-2xl space-y-5">
+      <h2 className="text-base font-semibold text-foreground">Context</h2>
+
+      <div className="rounded-lg border border-border/60 bg-card p-3">
+        <div className="mb-1 flex items-center justify-between">
+          <Label htmlFor="context-tokens" className="text-xs font-medium text-foreground">
+            Context window budget
+          </Label>
+          <Input
+            id="context-tokens"
+            type="number"
+            min={1024}
+            step={1024}
+            value={settings.context_tokens}
+            onChange={(e) => {
+              const context_tokens = Math.max(1024, Number(e.target.value) || 0)
+              applyLive({ ...settings, context_tokens })
+            }}
+            className="h-7 w-28 text-right text-xs"
+          />
+        </div>
+        <p className="text-[11px] text-muted-foreground">
+          How much conversation history (in tokens) is sent with each request. This is an
+          estimate, not an exact tokenizer count - no tokenizer is bundled, so a conservative
+          characters-per-token proxy is used instead. When a conversation grows past this
+          budget, the oldest messages are dropped first; pin a message to always keep it, or
+          exclude one to keep it out of every request.
+        </p>
       </div>
     </div>
   )

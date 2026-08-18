@@ -1,6 +1,8 @@
 import { invoke } from '@tauri-apps/api/core'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import type {
+  ContextFlag,
+  ContextUsage,
   Conversation,
   Diagnostics,
   Message,
@@ -94,6 +96,12 @@ export const ipc = {
     }),
 
   deleteMessage: (messageId: number) => invoke<void>('delete_message', { messageId }),
+
+  getContextUsage: (conversationId: number, draft?: string | null) =>
+    invoke<ContextUsage>('get_context_usage', { conversationId, draft: draft ?? null }),
+
+  setMessageContextFlag: (messageId: number, flag: ContextFlag) =>
+    invoke<void>('set_message_context_flag', { messageId, flag }),
 
   listModels: (providerId: string, forceRefresh: boolean) =>
     invoke<ModelInfo[]>('list_models', { providerId, forceRefresh }),

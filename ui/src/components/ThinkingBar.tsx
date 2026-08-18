@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { CheckIcon, ChevronDownIcon, ChevronRightIcon, CopyIcon } from 'lucide-react'
 import { useCopyFeedback } from '../lib/useCopyFeedback'
 
@@ -15,7 +15,17 @@ function formatDuration(ms: number | null | undefined) {
 }
 
 export function ThinkingBar({ reasoning, isStreaming = false, durationMs }: ThinkingBarProps) {
-  const [open, setOpen] = useState(true)
+  // Expanded while actively thinking so the user can watch it happen;
+  // collapses itself once reasoning finishes so the answer isn't buried
+  // under a wall of scrollback. A manual toggle still overrides this.
+  const [open, setOpen] = useState(isStreaming)
+  const wasStreamingRef = useRef(isStreaming)
+  useEffect(() => {
+    if (wasStreamingRef.current && !isStreaming) {
+      setOpen(false)
+    }
+    wasStreamingRef.current = isStreaming
+  }, [isStreaming])
   const [copied, copy] = useCopyFeedback()
   const duration = formatDuration(durationMs)
 

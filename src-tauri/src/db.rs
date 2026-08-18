@@ -28,9 +28,12 @@ pub struct Message {
     pub tokens_in: Option<i64>,
     pub tokens_out: Option<i64>,
     pub created_at: i64,
+    /// `"normal" | "pinned" | "excluded"` - whether this row is forced into
+    /// or out of the context sent to the provider. See `context.rs`.
+    pub context_flag: String,
 }
 
-const SCHEMA_VERSION: i64 = 4;
+const SCHEMA_VERSION: i64 = 5;
 
 pub fn open(path: &Path) -> rusqlite::Result<Connection> {
     let conn = Connection::open(path)?;
@@ -112,6 +115,23 @@ fn init_schema(conn: &Connection) -> rusqlite::Result<()> {
         if !has_agent_col {
             conn.execute(
                 "ALTER TABLE conversations ADD COLUMN agent_id TEXT DEFAULT 'general-assistant'",
+                [],
+            )?;
+        }
+    }
+
+    if version < 5 {
+        let has_context_flag_col: bool = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('messages') WHERE name = 'context_flag'",
+                [],
+                |r| r.get::<_, i64>(0),
+            )
+            .map(|c| c > 0)
+            .unwrap_or(false);
+        if !has_context_flag_col {
+            conn.execute(
+                "ALTER TABLE messages ADD COLUMN context_flag TEXT NOT NULL DEFAULT 'normal'",
                 [],
             )?;
         }
@@ -264,7 +284,7 @@ pub fn clear_messages(conn: &Connection, conversation_id: i64) -> rusqlite::Resu
     Ok(())
 }
 
-const MESSAGE_COLUMNS: &str = "id, conversation_id, role, content, reasoning, provider, model, duration_ms, tokens_in, tokens_out, created_at";
+const MESSAGE_COLUMNS: &str = "id, conversation_id, role, content, reasoning, provider, model, duration_ms, tokens_in, tokens_out, created_at, context_flag";
 
 fn row_to_message(r: &rusqlite::Row) -> rusqlite::Result<Message> {
     Ok(Message {
@@ -279,6 +299,7 @@ fn row_to_message(r: &rusqlite::Row) -> rusqlite::Result<Message> {
         tokens_in: r.get(8)?,
         tokens_out: r.get(9)?,
         created_at: r.get(10)?,
+        context_flag: r.get(11)?,
     })
 }
 
@@ -310,28 +331,48 @@ pub fn get_messages(
 pub struct ContextRow {
     pub role: String,
     pub content: String,
+    /// Forced into the sent context regardless of the token budget. Excluded
+    /// rows never reach here at all - `get_context_messages` filters them out
+    /// in SQL, so there's no corresponding `excluded` flag to carry.
+    pub pinned: bool,
 }
 
-/// Newest-first, capped at `limit` rows - the caller (`budget_history`) walks
-/// backwards from the most recent turn under a token budget, so it needs the
-/// most recent rows first, not the oldest. Uses the same
+/// Newest-first, capped at `limit` rows - the caller (`context::plan_context`)
+/// walks backwards from the most recent turn under a token budget, so it
+/// needs the most recent rows first, not the oldest. Uses the same
 /// `(conversation_id, id)` index as `get_messages`; SQLite can walk it in
-/// reverse for `ORDER BY id DESC`.
+/// reverse for `ORDER BY id DESC`. Rows flagged `excluded` are filtered out
+/// here rather than in `plan_context` - they should never occupy a slot in
+/// `HISTORY_ROW_CAP` either.
 pub fn get_context_messages(
     conn: &Connection,
     conversation_id: i64,
     limit: i64,
 ) -> rusqlite::Result<Vec<ContextRow>> {
     let mut stmt = conn.prepare(
-        "SELECT role, content FROM messages WHERE conversation_id = ?1 ORDER BY id DESC LIMIT ?2",
+        "SELECT role, content, context_flag FROM messages
+         WHERE conversation_id = ?1 AND context_flag != 'excluded'
+         ORDER BY id DESC LIMIT ?2",
     )?;
     let rows = stmt.query_map(params![conversation_id, limit], |r| {
+        let flag: String = r.get(2)?;
         Ok(ContextRow {
             role: r.get(0)?,
             content: r.get(1)?,
+            pinned: flag == "pinned",
         })
     })?;
     rows.collect()
+}
+
+/// `flag` must be `"normal" | "pinned" | "excluded"` - validated by the
+/// `commands::set_message_context_flag` IPC boundary, not re-checked here.
+pub fn set_message_context_flag(conn: &Connection, id: i64, flag: &str) -> rusqlite::Result<()> {
+    conn.execute(
+        "UPDATE messages SET context_flag = ?1 WHERE id = ?2",
+        params![flag, id],
+    )?;
+    touch_conversation_by_message(conn, id)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -827,5 +868,80 @@ mod tests {
         delete_message(&conn, id).unwrap();
         let after_delete = get_conversation(&conn, conv.id).unwrap().unwrap();
         assert!(after_delete.updated_at > 0);
+    }
+
+    #[test]
+    fn migrates_v4_schema_defaulting_context_flag_to_normal() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "
+            CREATE TABLE conversations (
+                id INTEGER PRIMARY KEY,
+                title TEXT NOT NULL,
+                provider TEXT NOT NULL,
+                model TEXT NOT NULL,
+                system_prompt TEXT,
+                agent_id TEXT DEFAULT 'general-assistant',
+                pinned INTEGER NOT NULL DEFAULT 0,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL
+            );
+            CREATE TABLE messages (
+                id INTEGER PRIMARY KEY,
+                conversation_id INTEGER NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+                role TEXT NOT NULL,
+                content TEXT NOT NULL,
+                reasoning TEXT,
+                provider TEXT,
+                model TEXT,
+                duration_ms INTEGER,
+                tokens_in INTEGER,
+                tokens_out INTEGER,
+                created_at INTEGER NOT NULL
+            );
+            ",
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO conversations (id, title, provider, model, created_at, updated_at)
+             VALUES (1, 'Chat', 'openrouter', 'gpt', 100, 100)",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO messages (id, conversation_id, role, content, created_at)
+             VALUES (1, 1, 'user', 'hello', 100)",
+            [],
+        )
+        .unwrap();
+        conn.pragma_update(None, "user_version", 4i64).unwrap();
+
+        init_schema(&conn).unwrap();
+
+        let version: i64 = conn
+            .query_row("PRAGMA user_version", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(version, SCHEMA_VERSION);
+
+        let messages = get_messages(&conn, 1, 10, None).unwrap();
+        assert_eq!(messages[0].context_flag, "normal");
+    }
+
+    #[test]
+    fn get_context_messages_excludes_excluded_rows_and_flags_pinned() {
+        let conn = memory_db();
+        let conv = create_conversation(&conn, "openrouter", "gpt-test", None, None).unwrap();
+        let first = insert_simple(&conn, conv.id, "user", "first");
+        insert_simple(&conn, conv.id, "assistant", "second");
+        let third = insert_simple(&conn, conv.id, "user", "third");
+
+        set_message_context_flag(&conn, first, "pinned").unwrap();
+        set_message_context_flag(&conn, third, "excluded").unwrap();
+
+        let rows = get_context_messages(&conn, conv.id, 10).unwrap();
+        let contents: Vec<_> = rows.iter().map(|r| r.content.as_str()).collect();
+        assert_eq!(contents, vec!["second", "first"]);
+        assert!(rows.iter().find(|r| r.content == "first").unwrap().pinned);
+        assert!(!rows.iter().find(|r| r.content == "second").unwrap().pinned);
     }
 }

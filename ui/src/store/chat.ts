@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { ipc, listenToStream } from '../lib/ipc'
-import type { Conversation, Message } from '../lib/types'
+import type { ContextFlag, Conversation, Message } from '../lib/types'
 import { useSettingsStore } from './settings'
 
 const PAGE_SIZE = 50
@@ -57,6 +57,7 @@ interface ChatState {
   editMessage: (message: Message, content: string) => Promise<void>
   editAndResendMessage: (message: Message, content: string, reasoningEffort?: string | null) => Promise<void>
   deleteMessage: (message: Message) => Promise<void>
+  setMessageContextFlag: (message: Message, flag: ContextFlag) => Promise<void>
   deleteConversation: (id: number) => Promise<void>
   deleteConversations: (ids: number[]) => Promise<void>
   sendMessage: (text: string, reasoningEffort?: string | null) => Promise<void>
@@ -282,6 +283,22 @@ export const useChatStore = create<ChatState>((set, get) => ({
     })
   },
 
+  setMessageContextFlag: async (message, flag) => {
+    await ipc.setMessageContextFlag(message.id, flag)
+    set((s) => {
+      const existing = s.messagesByConversation[message.conversation_id]
+      if (!existing) return {}
+      return {
+        messagesByConversation: {
+          ...s.messagesByConversation,
+          [message.conversation_id]: existing.map((m) =>
+            m.id === message.id ? { ...m, context_flag: flag } : m,
+          ),
+        },
+      }
+    })
+  },
+
   sendMessage: async (text, reasoningEffort) => {
     let conversationId = get().activeConversationId
     if (conversationId === null) {
@@ -304,6 +321,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       tokens_in: null,
       tokens_out: null,
       created_at: Math.floor(Date.now() / 1000),
+      context_flag: 'normal',
     }
     set((s) => ({
       messagesByConversation: {
@@ -479,6 +497,7 @@ async function attachStreamListener(set: Set, get: Get, conversationId: number, 
           tokens_in: event.tokens_in,
           tokens_out: event.tokens_out,
           created_at: event.created_at,
+          context_flag: 'normal',
         }
         set((s) => {
           // The conversation is pinned (see `pinnedIds`) while it's the one
@@ -517,6 +536,7 @@ async function attachStreamListener(set: Set, get: Get, conversationId: number, 
           tokens_in: null,
           tokens_out: null,
           created_at: Math.floor(Date.now() / 1000),
+          context_flag: 'normal',
         }
         set((s) => {
           const existing = s.messagesByConversation[conversationId]

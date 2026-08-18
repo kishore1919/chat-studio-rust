@@ -6,6 +6,9 @@ use std::path::PathBuf;
 pub enum Dialect {
     OpenaiCompat,
     Ollama,
+    Anthropic,
+    Gemini,
+    Openai,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -262,44 +265,92 @@ fn default_context_tokens() -> u32 {
     32768
 }
 
+fn builtin_providers() -> Vec<ProviderConfig> {
+    vec![
+        ProviderConfig {
+            id: "openrouter".into(),
+            display_name: "OpenRouter".into(),
+            dialect: Dialect::OpenaiCompat,
+            base_url: "https://openrouter.ai/api/v1".into(),
+            api_key: String::new(),
+            enabled: true,
+            extra_headers: Default::default(),
+            models: Vec::new(),
+            disable_stream_options: false,
+        },
+        ProviderConfig {
+            id: "nvidia-nim".into(),
+            display_name: "NVIDIA NIM".into(),
+            dialect: Dialect::OpenaiCompat,
+            base_url: "https://integrate.api.nvidia.com/v1".into(),
+            api_key: String::new(),
+            enabled: true,
+            extra_headers: Default::default(),
+            models: Vec::new(),
+            disable_stream_options: false,
+        },
+        ProviderConfig {
+            id: "ollama-cloud".into(),
+            display_name: "Ollama Cloud".into(),
+            dialect: Dialect::Ollama,
+            base_url: "https://ollama.com".into(),
+            api_key: String::new(),
+            enabled: true,
+            extra_headers: Default::default(),
+            models: Vec::new(),
+            disable_stream_options: false,
+        },
+        ProviderConfig {
+            id: "openai".into(),
+            display_name: "OpenAI".into(),
+            dialect: Dialect::Openai,
+            base_url: "https://api.openai.com/v1".into(),
+            api_key: String::new(),
+            enabled: true,
+            extra_headers: Default::default(),
+            models: Vec::new(),
+            disable_stream_options: false,
+        },
+        ProviderConfig {
+            id: "anthropic".into(),
+            display_name: "Anthropic".into(),
+            dialect: Dialect::Anthropic,
+            base_url: "https://api.anthropic.com".into(),
+            api_key: String::new(),
+            enabled: true,
+            extra_headers: Default::default(),
+            models: Vec::new(),
+            disable_stream_options: false,
+        },
+        ProviderConfig {
+            id: "gemini".into(),
+            display_name: "Google Gemini".into(),
+            dialect: Dialect::Gemini,
+            base_url: "https://generativelanguage.googleapis.com".into(),
+            api_key: String::new(),
+            enabled: true,
+            extra_headers: Default::default(),
+            models: Vec::new(),
+            disable_stream_options: false,
+        },
+    ]
+}
+
+fn ensure_builtin_providers(settings: &mut Settings) -> bool {
+    let mut changed = false;
+    for builtin in builtin_providers() {
+        if !settings.providers.iter().any(|p| p.id == builtin.id) {
+            settings.providers.push(builtin);
+            changed = true;
+        }
+    }
+    changed
+}
+
 impl Default for Settings {
     fn default() -> Self {
         Settings {
-            providers: vec![
-                ProviderConfig {
-                    id: "openrouter".into(),
-                    display_name: "OpenRouter".into(),
-                    dialect: Dialect::OpenaiCompat,
-                    base_url: "https://openrouter.ai/api/v1".into(),
-                    api_key: String::new(),
-                    enabled: true,
-                    extra_headers: Default::default(),
-                    models: Vec::new(),
-                    disable_stream_options: false,
-                },
-                ProviderConfig {
-                    id: "nvidia-nim".into(),
-                    display_name: "NVIDIA NIM".into(),
-                    dialect: Dialect::OpenaiCompat,
-                    base_url: "https://integrate.api.nvidia.com/v1".into(),
-                    api_key: String::new(),
-                    enabled: true,
-                    extra_headers: Default::default(),
-                    models: Vec::new(),
-                    disable_stream_options: false,
-                },
-                ProviderConfig {
-                    id: "ollama-cloud".into(),
-                    display_name: "Ollama Cloud".into(),
-                    dialect: Dialect::Ollama,
-                    base_url: "https://ollama.com".into(),
-                    api_key: String::new(),
-                    enabled: true,
-                    extra_headers: Default::default(),
-                    models: Vec::new(),
-                    disable_stream_options: false,
-                },
-            ],
+            providers: builtin_providers(),
             default_provider: None,
             default_model: None,
             theme: ThemePreference::System,
@@ -388,14 +439,20 @@ pub fn load_settings() -> Result<Settings, ConfigError> {
     }
     let raw = std::fs::read_to_string(&path)?;
     let mut settings: Settings = toml::from_str(&raw)?;
+    let mut needs_save = false;
     if settings.theme_id.is_empty() {
         let migrated = migrate_theme_id(&settings.theme, &raw);
         if !migrated.is_empty() {
             settings.theme_id = migrated;
-            if let Err(e) = save_settings(&settings) {
-                // Non-fatal: the migration is recomputed on next launch.
-                tracing::warn!(error = %e, "could not persist migrated theme_id");
-            }
+            needs_save = true;
+        }
+    }
+    if ensure_builtin_providers(&mut settings) {
+        needs_save = true;
+    }
+    if needs_save {
+        if let Err(e) = save_settings(&settings) {
+            tracing::warn!(error = %e, "could not persist migrated settings");
         }
     }
     Ok(settings)

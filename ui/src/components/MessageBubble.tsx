@@ -4,7 +4,9 @@ import {
   ChevronDownIcon,
   ChevronRightIcon,
   CopyIcon,
+  EyeOffIcon,
   PencilIcon,
+  PinIcon,
   RotateCcwIcon,
   SendIcon,
   Trash2Icon,
@@ -46,6 +48,7 @@ function MessageBubbleImpl({ message }: MessageBubbleProps) {
   const editAndResendMessage = useChatStore((s) => s.editAndResendMessage)
   const deleteMessage = useChatStore((s) => s.deleteMessage)
   const retryMessage = useChatStore((s) => s.retryMessage)
+  const setMessageContextFlag = useChatStore((s) => s.setMessageContextFlag)
   const isStreaming = useChatStore((s) => s.streaming !== null)
 
   // Optimistically rendered / not-yet-persisted rows carry the PENDING_ID
@@ -74,6 +77,11 @@ function MessageBubbleImpl({ message }: MessageBubbleProps) {
   }, [cleanedAfterThinking, message.content, message.role])
 
   const handleCopy = () => copy(message.content)
+
+  const pinned = message.context_flag === 'pinned'
+  const excluded = message.context_flag === 'excluded'
+  const togglePinned = () => setMessageContextFlag(message, pinned ? 'normal' : 'pinned')
+  const toggleExcluded = () => setMessageContextFlag(message, excluded ? 'normal' : 'excluded')
 
   const startEdit = () => {
     setDraft(message.content)
@@ -107,6 +115,28 @@ function MessageBubbleImpl({ message }: MessageBubbleProps) {
         onClick={handleCopy}
       >
         {copied ? <CheckIcon className="size-3 text-success" /> : <CopyIcon className="size-3" />}
+      </Button>
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        className={cn('size-6', pinned ? 'text-primary' : 'text-muted-foreground hover:text-foreground')}
+        aria-label={pinned ? 'Unpin from context' : 'Pin in context'}
+        title={pendingHint ?? (pinned ? 'Unpin from context' : 'Always keep in context')}
+        disabled={pending}
+        onClick={togglePinned}
+      >
+        <PinIcon className="size-3" />
+      </Button>
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        className={cn('size-6', excluded ? 'text-primary' : 'text-muted-foreground hover:text-foreground')}
+        aria-label={excluded ? 'Include in context' : 'Exclude from context'}
+        title={pendingHint ?? (excluded ? 'Include in context' : 'Exclude from context')}
+        disabled={pending}
+        onClick={toggleExcluded}
+      >
+        <EyeOffIcon className="size-3" />
       </Button>
       {message.role === 'user' && (
         <Button
@@ -204,8 +234,14 @@ function MessageBubbleImpl({ message }: MessageBubbleProps) {
             {editing ? (
               editBox
             ) : (
-              <div className="rounded-2xl rounded-tr-xs bg-[var(--bubble-user)] px-4 py-2.5 text-[length:var(--chat-font-size)] leading-relaxed whitespace-pre-wrap break-words border border-border/30 shadow-xs">
-                {message.content}
+              <div
+                className={cn(
+                  'flex flex-col items-start rounded-2xl rounded-tr-xs bg-[var(--bubble-user)] px-4 py-2.5 text-[length:var(--chat-font-size)] leading-relaxed border border-border/30 shadow-xs',
+                  excluded && 'opacity-50',
+                )}
+              >
+                {(pinned || excluded) && <ContextFlagBadge excluded={excluded} />}
+                <span className="whitespace-pre-wrap break-words">{message.content}</span>
               </div>
             )}
           </div>
@@ -251,6 +287,7 @@ function MessageBubbleImpl({ message }: MessageBubbleProps) {
         <span className="text-[11px] text-muted-foreground">
           {TIME_FMT.format(new Date(message.created_at * 1000))}
         </span>
+        {(pinned || excluded) && <ContextFlagBadge excluded={excluded} />}
         {duration && (
           <button
             type="button"
@@ -272,9 +309,24 @@ function MessageBubbleImpl({ message }: MessageBubbleProps) {
 
       {reasoning && <ThinkingBar reasoning={reasoning} durationMs={message.duration_ms} />}
 
-      {editing ? editBox : renderAssistantContent()}
+      <div className={cn(excluded && 'opacity-50')}>{editing ? editBox : renderAssistantContent()}</div>
       {!editing && actionsRow('left')}
     </MessageRow>
+  )
+}
+
+function ContextFlagBadge({ excluded }: { excluded: boolean }) {
+  if (excluded) {
+    return (
+      <span className="mb-1 inline-flex items-center gap-1 rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+        <EyeOffIcon className="size-2.5" /> Not sent
+      </span>
+    )
+  }
+  return (
+    <span className="mb-1 inline-flex items-center gap-1 rounded-md bg-primary/15 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+      <PinIcon className="size-2.5" /> Pinned
+    </span>
   )
 }
 
