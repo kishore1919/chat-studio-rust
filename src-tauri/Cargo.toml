@@ -24,7 +24,7 @@ async-trait = "0.1"
 rusqlite = { version = "0.31", features = ["bundled"] }
 
 dirs = "5"
-thiserror = "1"
+thiserror = "2"
 open = "5"
 
 # Direct tracing rather than tauri-plugin-log: settings loading and db opening
