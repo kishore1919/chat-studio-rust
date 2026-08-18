@@ -23,7 +23,7 @@ async-trait = "0.1"
 
 rusqlite = { version = "0.31", features = ["bundled"] }
 
-dirs = "5"
+dirs = "6"
 thiserror = "1"
 open = "5"
 
