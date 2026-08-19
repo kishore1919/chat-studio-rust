@@ -2,9 +2,10 @@ use crate::config::{self, ProviderConfig, Settings};
 use crate::context;
 use crate::db;
 use crate::providers::{
-    build_provider, ChatRequest, ModelInfo, ProviderError, ProviderEvent, StreamEvent, Usage,
+    build_provider, ChatMessage, ChatRequest, ModelInfo, ProviderError, ProviderEvent, StreamEvent,
+    Usage,
 };
-use crate::state::{AppState, ModelCacheEntry};
+use crate::state::{AppState, ModelCacheEntry, RequestSnapshot};
 use serde::Serialize;
 use std::time::Instant;
 use tauri::{AppHandle, Emitter, Manager, State};
@@ -343,6 +344,33 @@ pub fn get_diagnostics(state: State<AppState>) -> Diagnostics {
     }
 }
 
+#[derive(Serialize)]
+pub struct LastRequestInfo {
+    pub conversation_id: i64,
+    pub provider_id: String,
+    pub model: String,
+    pub message_roles: Vec<String>,
+    pub used_tokens: u32,
+    pub budget_tokens: u32,
+    pub dropped_count: usize,
+}
+
+/// Snapshot of the most recent request assembled by `prepare_chat`, so
+/// "the model forgot everything" can be checked against what was actually
+/// sent instead of guessed at. `None` until the first message of the session.
+#[tauri::command]
+pub fn get_last_request(state: State<AppState>) -> Option<LastRequestInfo> {
+    state.last_request().as_ref().map(|r| LastRequestInfo {
+        conversation_id: r.conversation_id,
+        provider_id: r.provider_id.clone(),
+        model: r.model.clone(),
+        message_roles: r.message_roles.clone(),
+        used_tokens: r.used_tokens,
+        budget_tokens: r.budget_tokens,
+        dropped_count: r.dropped_count,
+    })
+}
+
 fn find_provider(settings: &Settings, provider_id: &str) -> Result<ProviderConfig, String> {
     settings
         .providers
@@ -452,6 +480,15 @@ fn resolve_system_prompt(
         .or_else(|| global_system_prompt.map(String::from))
 }
 
+/// What `prepare_chat` hands off to `start_stream`: the resolved provider
+/// plus the assembled request, with enough of the plan left in for post-stream
+/// decisions (rolling memory only fires when history was actually dropped).
+struct PreparedChat {
+    provider_cfg: ProviderConfig,
+    request: ChatRequest,
+    newest_dropped_id: Option<i64>,
+}
+
 /// Loads history + resolves the provider config for a conversation. Kept
 /// synchronous and short-lived so the db/settings locks never cross an
 /// await point.
@@ -459,7 +496,7 @@ fn prepare_chat(
     state: &AppState,
     conversation_id: i64,
     reasoning_effort: Option<String>,
-) -> Result<(ProviderConfig, ChatRequest), String> {
+) -> Result<PreparedChat, String> {
     let conn = state.db();
     let conversation = db::get_conversation(&conn, conversation_id)
         .map_err(db_err)?
@@ -475,19 +512,54 @@ fn prepare_chat(
     let settings = state.settings();
     let provider_cfg = find_provider(&settings, &conversation.provider)?;
     let context_tokens = settings.context_tokens;
+    let memory_enabled = settings.memory_enabled;
     let system_prompt = resolve_system_prompt(&conversation, settings.system_prompt.as_deref());
     drop(settings);
 
-    let plan = context::plan_context(&history, system_prompt.as_deref(), context_tokens);
+    // The stored summary only feeds the request while memory is on - flipping
+    // the toggle off must revert to today's drop-history behavior even if
+    // older summaries still exist on disk.
+    let summary = memory_enabled
+        .then(|| conversation.summary.clone())
+        .flatten();
+    let plan = context::plan_context(
+        &history,
+        system_prompt.as_deref(),
+        summary.as_deref(),
+        context_tokens,
+    );
 
-    Ok((
+    let message_roles: Vec<String> = plan.messages.iter().map(|m| m.role.clone()).collect();
+    tracing::debug!(
+        conversation_id,
+        message_count = plan.messages.len(),
+        dropped_count = plan.dropped_count,
+        used_tokens = plan.used_tokens,
+        budget_tokens = plan.budget_tokens,
+        roles = ?message_roles,
+        lengths = ?plan.messages.iter().map(|m| m.content.len()).collect::<Vec<_>>(),
+        "request assembled"
+    );
+    tracing::trace!(conversation_id, body = ?plan.messages, "request body");
+    *state.last_request() = Some(RequestSnapshot {
+        conversation_id,
+        provider_id: provider_cfg.id.clone(),
+        model: conversation.model.clone(),
+        message_roles,
+        used_tokens: plan.used_tokens,
+        budget_tokens: plan.budget_tokens,
+        dropped_count: plan.dropped_count,
+    });
+
+    Ok(PreparedChat {
         provider_cfg,
-        ChatRequest {
+        request: ChatRequest {
             model: conversation.model,
             messages: plan.messages,
             reasoning_effort,
         },
-    ))
+        newest_dropped_id: plan.newest_dropped_id,
+    })
 }
 
 /// Snapshot of how full the context window is for a conversation, optionally
@@ -498,6 +570,10 @@ pub struct ContextUsage {
     pub used_tokens: u32,
     pub budget_tokens: u32,
     pub dropped_count: usize,
+    /// Tokens spent on system-role content - surfaced so a long skill prompt
+    /// is attributable as the cause of drops instead of looking like bloat in
+    /// the history itself.
+    pub system_tokens: u32,
 }
 
 #[tauri::command]
@@ -518,6 +594,7 @@ pub async fn get_context_usage(
         history.insert(
             0,
             db::ContextRow {
+                id: 0,
                 role: "user".into(),
                 content: text,
                 pinned: false,
@@ -527,14 +604,24 @@ pub async fn get_context_usage(
 
     let settings = state.settings();
     let context_tokens = settings.context_tokens;
+    let memory_enabled = settings.memory_enabled;
     let system_prompt = resolve_system_prompt(&conversation, settings.system_prompt.as_deref());
     drop(settings);
 
-    let plan = context::plan_context(&history, system_prompt.as_deref(), context_tokens);
+    let summary = memory_enabled
+        .then(|| conversation.summary.clone())
+        .flatten();
+    let plan = context::plan_context(
+        &history,
+        system_prompt.as_deref(),
+        summary.as_deref(),
+        context_tokens,
+    );
     Ok(ContextUsage {
         used_tokens: plan.used_tokens,
         budget_tokens: plan.budget_tokens,
         dropped_count: plan.dropped_count,
+        system_tokens: plan.system_tokens,
     })
 }
 
@@ -657,7 +744,10 @@ async fn start_stream(
     reasoning_effort: Option<String>,
     stream_id: String,
 ) -> Result<(), String> {
-    let (provider_cfg, chat_request) = prepare_chat(state, conversation_id, reasoning_effort)?;
+    let prepared = prepare_chat(state, conversation_id, reasoning_effort)?;
+    let provider_cfg = prepared.provider_cfg;
+    let chat_request = prepared.request;
+    let newest_dropped_id = prepared.newest_dropped_id;
     let model = chat_request.model.clone();
     let provider_id = provider_cfg.id.clone();
 
@@ -680,6 +770,7 @@ async fn start_stream(
 
     let app_for_task = app.clone();
     let stream_id_for_task = stream_id.clone();
+    let provider_cfg_for_summary = provider_cfg.clone();
 
     tokio::spawn(async move {
         let app_state = app_for_task.state::<AppState>();
@@ -782,6 +873,28 @@ async fn start_stream(
             "stream finished"
         );
 
+        // Rolling memory: this request dropped the oldest turns, so have the
+        // conversation's own provider compress them into a stored summary the
+        // next request injects in their place. Background, best-effort - a
+        // failure just degrades to today's drop-it-and-move-on behavior.
+        if let Some(through_id) = newest_dropped_id {
+            if app_state.settings().memory_enabled {
+                let app_for_summary = app_for_task.clone();
+                let provider_cfg_for_summary = provider_cfg_for_summary.clone();
+                let model_for_summary = model.clone();
+                tokio::spawn(async move {
+                    summarize_old_turns(
+                        &app_for_summary,
+                        conversation_id,
+                        provider_cfg_for_summary,
+                        model_for_summary,
+                        through_id,
+                    )
+                    .await;
+                });
+            }
+        }
+
         if let Some(message) = persist_error {
             // Takes precedence over the outcome: a successful generation that
             // wasn't saved is still a failure from the user's point of view.
@@ -840,13 +953,122 @@ async fn start_stream(
     Ok(())
 }
 
+/// Instruction for the rolling summary call. The summary stands in for the
+/// dropped oldest turns, so it has to carry enough that a later question can
+/// still be answered from it - it's sent as system content, not shown to the
+/// user.
+const SUMMARY_PROMPT: &str = "Write a concise but complete summary of the conversation below. Preserve key facts, decisions, open questions, and anything a later question might refer back to. The summary will be sent to the model in place of these messages, so it must stand on its own.";
+
+/// Compresses the oldest turns of a conversation (those `plan_context` just
+/// dropped) via the conversation's own provider and stores the result as the
+/// rolling summary. Runs detached from the stream that triggered it; every
+/// failure path is logged and non-fatal.
+async fn summarize_old_turns(
+    app: &AppHandle,
+    conversation_id: i64,
+    provider_cfg: ProviderConfig,
+    model: String,
+    through_id: i64,
+) {
+    let app_state = app.state::<AppState>();
+    let messages = {
+        let conn = app_state.db();
+        match db::get_messages_up_to(&conn, conversation_id, through_id) {
+            Ok(m) => m,
+            Err(e) => {
+                tracing::warn!(conversation_id, error = %e, "rolling summary: history load failed");
+                return;
+            }
+        }
+    };
+    if messages.is_empty() {
+        return;
+    }
+
+    let mut req_messages = vec![ChatMessage {
+        role: "system".into(),
+        content: SUMMARY_PROMPT.into(),
+    }];
+    req_messages.extend(messages.iter().map(|m| ChatMessage {
+        role: m.role.clone(),
+        content: m.content.clone(),
+    }));
+
+    let provider = build_provider(&app_state.http, &provider_cfg);
+    let (tx, mut rx) = mpsc::channel::<ProviderEvent>(32);
+    let cancel = CancellationToken::new();
+    let task = tokio::spawn(async move {
+        provider
+            .stream_chat(
+                ChatRequest {
+                    model,
+                    messages: req_messages,
+                    reasoning_effort: None,
+                },
+                tx,
+                cancel,
+            )
+            .await
+    });
+
+    let mut summary = String::new();
+    while let Some(event) = rx.recv().await {
+        if let ProviderEvent::Delta { text } = event {
+            summary.push_str(&text);
+        }
+    }
+    // Drain first, then check the result - the provider blocks on the bounded
+    // channel, so not draining would deadlock the summary generation itself.
+    match task.await {
+        Ok(Ok(_)) => {}
+        Ok(Err(e)) => {
+            tracing::warn!(conversation_id, error = %e, "rolling summary stream failed");
+            return;
+        }
+        Err(join_err) => {
+            tracing::warn!(conversation_id, error = %join_err, "rolling summary task panicked");
+            return;
+        }
+    }
+    let summary = summary.trim().to_string();
+    if summary.is_empty() {
+        tracing::warn!(conversation_id, "rolling summary produced no text");
+        return;
+    }
+
+    let conn = app_state.db();
+    match db::set_conversation_summary(&conn, conversation_id, &summary, through_id) {
+        Ok(()) => {
+            tracing::debug!(
+                conversation_id,
+                chars = summary.len(),
+                "rolling summary persisted"
+            )
+        }
+        Err(e) => tracing::warn!(conversation_id, error = %e, "rolling summary not persisted"),
+    }
+}
+
 #[tauri::command]
 pub async fn test_mcp_server(
+    state: State<'_, AppState>,
+    transport: crate::config::McpTransport,
     command: String,
     args: Vec<String>,
     env: std::collections::BTreeMap<String, String>,
+    url: String,
+    headers: std::collections::BTreeMap<String, String>,
 ) -> Result<Vec<crate::mcp::McpTool>, String> {
-    crate::mcp::test_connection(&command, &args, &env).await
+    crate::mcp::test_connection(
+        Some(state.http.clone()),
+        transport,
+        &command,
+        &args,
+        &env,
+        &url,
+        &headers,
+    )
+    .await
 }
 
 #[tauri::command]
@@ -860,11 +1082,22 @@ pub async fn list_mcp_tools(
 
     // Concurrent, not sequential: the old per-server spawn-then-kill paid a
     // process cold start serially per server on every refresh.
+    let http = Some(state.http.clone());
     let results =
         futures_util::future::join_all(servers.iter().filter(|s| s.enabled).map(|s| async {
             let result = state
                 .mcp
-                .list_tools(&s.id, &s.name, &s.command, &s.args, &s.env)
+                .list_tools(
+                    http.clone(),
+                    &s.id,
+                    &s.name,
+                    s.transport,
+                    &s.command,
+                    &s.args,
+                    &s.env,
+                    &s.url,
+                    &s.headers,
+                )
                 .await;
             (s.id.clone(), result)
         }))
@@ -902,10 +1135,14 @@ pub async fn call_mcp_tool(
     state
         .mcp
         .call_tool(
+            Some(state.http.clone()),
             &server.id,
+            server.transport,
             &server.command,
             &server.args,
             &server.env,
+            &server.url,
+            &server.headers,
             &tool_name,
             &arguments,
         )

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
-import { ArrowUpIcon, ChevronDownIcon, ClockIcon, MessageSquarePlusIcon, SquareIcon } from 'lucide-react'
+import { ArrowUpIcon, ChevronDownIcon, ClockIcon, MessageSquarePlusIcon, SquareIcon, TriangleAlertIcon } from 'lucide-react'
 import { useChatStore } from '../store/chat'
 import { useSettingsStore } from '../store/settings'
 import { ipc } from '../lib/ipc'
@@ -437,23 +437,32 @@ function ContextMeter({ usage }: { usage: ContextUsage }) {
   const ratio = Math.min(1, usage.used_tokens / usage.budget_tokens)
   const pct = Math.round(ratio * 100)
   return (
-    <div className="flex items-center gap-2 px-0.5 text-[10px] text-muted-foreground">
-      <div className="h-1 flex-1 overflow-hidden rounded-full bg-muted">
-        <div
-          className={cn(
-            'h-full rounded-full transition-[width]',
-            ratio >= 1 ? 'bg-destructive' : ratio >= 0.8 ? 'bg-amber-500' : 'bg-primary/60',
-          )}
-          style={{ width: `${Math.max(2, pct)}%` }}
-        />
-      </div>
-      <span className="tabular-nums">
-        {usage.used_tokens.toLocaleString()} / {usage.budget_tokens.toLocaleString()} tokens
-      </span>
-      {usage.dropped_count > 0 ? (
-        <span title="Earlier messages excluded from this request">
-          · {usage.dropped_count} not sent
+    <div className="space-y-1 px-0.5">
+      <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+        <div className="h-1 flex-1 overflow-hidden rounded-full bg-muted">
+          <div
+            className={cn(
+              'h-full rounded-full transition-[width]',
+              ratio >= 1 ? 'bg-destructive' : ratio >= 0.8 ? 'bg-amber-500' : 'bg-primary/60',
+            )}
+            style={{ width: `${Math.max(2, pct)}%` }}
+          />
+        </div>
+        <span className="tabular-nums">
+          {usage.used_tokens.toLocaleString()} / {usage.budget_tokens.toLocaleString()} tokens
         </span>
+      </div>
+      {usage.dropped_count > 0 ? (
+        <p className="flex items-start gap-1 text-[10px] text-amber-500">
+          <TriangleAlertIcon className="mt-px size-3 shrink-0" />
+          <span>
+            {usage.dropped_count} earlier message{usage.dropped_count === 1 ? '' : 's'} won't be
+            sent
+            {usage.system_tokens > 0
+              ? ` - the system prompt uses ${usage.system_tokens.toLocaleString()} tokens of the budget`
+              : ''}
+          </span>
+        </p>
       ) : null}
     </div>
   )

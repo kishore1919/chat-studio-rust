@@ -59,7 +59,7 @@ export function ThinkingBar({ reasoning, isStreaming = false, durationMs }: Thin
       </button>
 
       {open && (
-        <div className="border-t border-border/30 bg-card/60 p-3 font-mono text-[12px] leading-relaxed whitespace-pre-wrap break-words max-h-80 overflow-y-auto text-muted-foreground">
+        <div className="border-t border-border/30 bg-card/60 p-3 font-mono text-[12px] leading-relaxed whitespace-pre-wrap break-words [overflow-wrap:anywhere] min-w-0 max-h-80 overflow-y-auto text-muted-foreground">
           {reasoning || (isStreaming ? 'Generating thoughts...' : '')}
           {reasoning && (
             <button

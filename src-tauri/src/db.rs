@@ -13,6 +13,13 @@ pub struct Conversation {
     pub pinned: bool,
     pub created_at: i64,
     pub updated_at: i64,
+    /// Rolling memory: the compressed text of the oldest turns that were
+    /// dropped to fit the context budget. See `context::plan_context` and
+    /// `commands::summarize_old_turns`. `None` until a drop triggers one.
+    pub summary: Option<String>,
+    /// Rowid of the newest message `summary` covers. Turns newer than this
+    /// have never been summarized.
+    pub summarized_through_id: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -33,7 +40,7 @@ pub struct Message {
     pub context_flag: String,
 }
 
-const SCHEMA_VERSION: i64 = 5;
+const SCHEMA_VERSION: i64 = 6;
 
 pub fn open(path: &Path) -> rusqlite::Result<Connection> {
     let conn = Connection::open(path)?;
@@ -75,7 +82,9 @@ fn init_schema(conn: &Connection) -> rusqlite::Result<()> {
             agent_id TEXT DEFAULT 'general-assistant',
             pinned INTEGER NOT NULL DEFAULT 0,
             created_at INTEGER NOT NULL,
-            updated_at INTEGER NOT NULL
+            updated_at INTEGER NOT NULL,
+            summary TEXT,
+            summarized_through_id INTEGER
         );
         CREATE TABLE IF NOT EXISTS messages (
             id INTEGER PRIMARY KEY,
@@ -137,6 +146,26 @@ fn init_schema(conn: &Connection) -> rusqlite::Result<()> {
         }
     }
 
+    if version < 6 {
+        // Rolling memory: the compressed summary of the oldest turns that got
+        // dropped. Both columns are added together, so one guard covers both.
+        let has_summary_col: bool = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('conversations') WHERE name = 'summary'",
+                [],
+                |r| r.get::<_, i64>(0),
+            )
+            .map(|c| c > 0)
+            .unwrap_or(false);
+        if !has_summary_col {
+            conn.execute("ALTER TABLE conversations ADD COLUMN summary TEXT", [])?;
+            conn.execute(
+                "ALTER TABLE conversations ADD COLUMN summarized_through_id INTEGER",
+                [],
+            )?;
+        }
+    }
+
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_conversations_sort ON conversations(pinned DESC, updated_at DESC)",
         [],
@@ -156,7 +185,7 @@ fn now() -> i64 {
 }
 
 const CONVERSATION_COLUMNS: &str =
-    "id, title, provider, model, system_prompt, agent_id, pinned, created_at, updated_at";
+    "id, title, provider, model, system_prompt, agent_id, pinned, created_at, updated_at, summary, summarized_through_id";
 
 fn row_to_conversation(r: &rusqlite::Row) -> rusqlite::Result<Conversation> {
     Ok(Conversation {
@@ -169,6 +198,8 @@ fn row_to_conversation(r: &rusqlite::Row) -> rusqlite::Result<Conversation> {
         pinned: r.get::<_, i64>(6)? != 0,
         created_at: r.get(7)?,
         updated_at: r.get(8)?,
+        summary: r.get(9)?,
+        summarized_through_id: r.get(10)?,
     })
 }
 
@@ -204,6 +235,8 @@ pub fn create_conversation(
         pinned: false,
         created_at: ts,
         updated_at: ts,
+        summary: None,
+        summarized_through_id: None,
     })
 }
 
@@ -280,7 +313,12 @@ pub fn clear_messages(conn: &Connection, conversation_id: i64) -> rusqlite::Resu
         "DELETE FROM messages WHERE conversation_id = ?1",
         params![conversation_id],
     )?;
-    touch_conversation(conn, conversation_id)?;
+    // A summary describes turns that just got deleted - without this it would
+    // be injected into a fresh empty conversation the next time drops happen.
+    conn.execute(
+        "UPDATE conversations SET summary = NULL, summarized_through_id = NULL, updated_at = ?1 WHERE id = ?2",
+        params![now(), conversation_id],
+    )?;
     Ok(())
 }
 
@@ -329,6 +367,7 @@ pub fn get_messages(
 /// thinking model the reasoning bodies dwarf the answers, and most endpoints
 /// reject or ignore fields they don't recognize.
 pub struct ContextRow {
+    pub id: i64,
     pub role: String,
     pub content: String,
     /// Forced into the sent context regardless of the token budget. Excluded
@@ -350,19 +389,55 @@ pub fn get_context_messages(
     limit: i64,
 ) -> rusqlite::Result<Vec<ContextRow>> {
     let mut stmt = conn.prepare(
-        "SELECT role, content, context_flag FROM messages
+        "SELECT id, role, content, context_flag FROM messages
          WHERE conversation_id = ?1 AND context_flag != 'excluded'
          ORDER BY id DESC LIMIT ?2",
     )?;
     let rows = stmt.query_map(params![conversation_id, limit], |r| {
-        let flag: String = r.get(2)?;
+        let flag: String = r.get(3)?;
         Ok(ContextRow {
-            role: r.get(0)?,
-            content: r.get(1)?,
+            id: r.get(0)?,
+            role: r.get(1)?,
+            content: r.get(2)?,
             pinned: flag == "pinned",
         })
     })?;
     rows.collect()
+}
+
+/// Chronological messages with `id <= through_id` - exactly the turns a
+/// rolling summary should compress (the oldest ones that got dropped).
+/// Excluded rows stay out so a user's "keep this out of context" intent
+/// doesn't sneak back in via the summary.
+pub fn get_messages_up_to(
+    conn: &Connection,
+    conversation_id: i64,
+    through_id: i64,
+) -> rusqlite::Result<Vec<Message>> {
+    let mut stmt = conn.prepare(&format!(
+        "SELECT {MESSAGE_COLUMNS}
+         FROM messages
+         WHERE conversation_id = ?1 AND id <= ?2 AND context_flag != 'excluded'
+         ORDER BY id"
+    ))?;
+    let rows = stmt.query_map(params![conversation_id, through_id], row_to_message)?;
+    rows.collect()
+}
+
+/// Stores (or replaces) the rolling summary for a conversation. Replaces, not
+/// appends - each run covers a superset of the last, so the old text is
+/// strictly worse than the new.
+pub fn set_conversation_summary(
+    conn: &Connection,
+    id: i64,
+    summary: &str,
+    through_id: i64,
+) -> rusqlite::Result<()> {
+    conn.execute(
+        "UPDATE conversations SET summary = ?1, summarized_through_id = ?2, updated_at = ?3 WHERE id = ?4",
+        params![summary, through_id, now(), id],
+    )?;
+    Ok(())
 }
 
 /// `flag` must be `"normal" | "pinned" | "excluded"` - validated by the
@@ -925,6 +1000,103 @@ mod tests {
 
         let messages = get_messages(&conn, 1, 10, None).unwrap();
         assert_eq!(messages[0].context_flag, "normal");
+    }
+
+    #[test]
+    fn migrates_v5_schema_adding_summary_columns() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "
+            CREATE TABLE conversations (
+                id INTEGER PRIMARY KEY,
+                title TEXT NOT NULL,
+                provider TEXT NOT NULL,
+                model TEXT NOT NULL,
+                system_prompt TEXT,
+                agent_id TEXT DEFAULT 'general-assistant',
+                pinned INTEGER NOT NULL DEFAULT 0,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL
+            );
+            CREATE TABLE messages (
+                id INTEGER PRIMARY KEY,
+                conversation_id INTEGER NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+                role TEXT NOT NULL,
+                content TEXT NOT NULL,
+                reasoning TEXT,
+                provider TEXT,
+                model TEXT,
+                duration_ms INTEGER,
+                tokens_in INTEGER,
+                tokens_out INTEGER,
+                created_at INTEGER NOT NULL,
+                context_flag TEXT NOT NULL DEFAULT 'normal'
+            );
+            ",
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO conversations (id, title, provider, model, created_at, updated_at)
+             VALUES (1, 'Chat', 'openrouter', 'gpt', 100, 100)",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO messages (id, conversation_id, role, content, created_at)
+             VALUES (1, 1, 'user', 'hello', 100)",
+            [],
+        )
+        .unwrap();
+        conn.pragma_update(None, "user_version", 5i64).unwrap();
+
+        init_schema(&conn).unwrap();
+
+        let version: i64 = conn
+            .query_row("PRAGMA user_version", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(version, SCHEMA_VERSION);
+
+        let conv = get_conversation(&conn, 1).unwrap().unwrap();
+        assert_eq!(conv.title, "Chat");
+        assert_eq!(conv.summary, None, "new column should default to NULL");
+        assert_eq!(
+            conv.summarized_through_id, None,
+            "new column should default to NULL"
+        );
+    }
+
+    #[test]
+    fn summary_columns_round_trip_and_clear_messages_wipes_them() {
+        let conn = memory_db();
+        let conv = create_conversation(&conn, "openrouter", "gpt-test", None, None).unwrap();
+        let first = insert_simple(&conn, conv.id, "user", "old turn");
+        insert_simple(&conn, conv.id, "assistant", "reply");
+
+        set_conversation_summary(&conn, conv.id, "summarized", first).unwrap();
+        let conv = get_conversation(&conn, conv.id).unwrap().unwrap();
+        assert_eq!(conv.summary.as_deref(), Some("summarized"));
+        assert_eq!(conv.summarized_through_id, Some(first));
+
+        clear_messages(&conn, conv.id).unwrap();
+        let conv = get_conversation(&conn, conv.id).unwrap().unwrap();
+        assert_eq!(
+            conv.summary, None,
+            "clearing messages must clear the summary"
+        );
+        assert_eq!(conv.summarized_through_id, None);
+    }
+
+    #[test]
+    fn get_messages_up_to_returns_chronological_oldest_turns() {
+        let conn = memory_db();
+        let conv = create_conversation(&conn, "openrouter", "gpt-test", None, None).unwrap();
+        let m1 = insert_simple(&conn, conv.id, "user", "first");
+        insert_simple(&conn, conv.id, "assistant", "second");
+        insert_simple(&conn, conv.id, "user", "third");
+
+        let rows = get_messages_up_to(&conn, conv.id, m1).unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].content, "first");
     }
 
     #[test]

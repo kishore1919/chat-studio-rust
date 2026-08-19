@@ -13,7 +13,7 @@ interface MessageRowProps {
  * reserving space on every row. */
 export function MessageRow({ children, className }: MessageRowProps) {
   return (
-    <div className={`group relative mx-auto w-full max-w-[var(--reading-max)] px-4 ${className ?? ''}`}>
+    <div className={`group relative mx-auto w-full max-w-[var(--reading-max)] min-w-0 px-4 ${className ?? ''}`}>
       {children}
     </div>
   )

@@ -229,19 +229,19 @@ function MessageBubbleImpl({ message }: MessageBubbleProps) {
   if (message.role === 'user') {
     return (
       <MessageRow className="pt-1.5 pb-9">
-        <div className="flex justify-end">
+        <div className="flex justify-end min-w-0">
           <div className="max-w-[85%] min-w-0">
             {editing ? (
               editBox
             ) : (
               <div
                 className={cn(
-                  'flex flex-col items-start rounded-2xl rounded-tr-xs bg-[var(--bubble-user)] px-4 py-2.5 text-[length:var(--chat-font-size)] leading-relaxed border border-border/30 shadow-xs',
+                  'flex flex-col items-start min-w-0 max-w-full rounded-2xl rounded-tr-xs bg-[var(--bubble-user)] px-4 py-2.5 text-[length:var(--chat-font-size)] leading-relaxed border border-border/30 shadow-xs',
                   excluded && 'opacity-50',
                 )}
               >
                 {(pinned || excluded) && <ContextFlagBadge excluded={excluded} />}
-                <span className="whitespace-pre-wrap break-words">{message.content}</span>
+                <span className="whitespace-pre-wrap break-words [overflow-wrap:anywhere] min-w-0 max-w-full">{message.content}</span>
               </div>
             )}
           </div>

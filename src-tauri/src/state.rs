@@ -13,11 +13,26 @@ pub struct ModelCacheEntry {
     pub models: Vec<ModelInfo>,
 }
 
+/// What was actually assembled for the most recent `prepare_chat` call - kept
+/// so Settings -> Diagnostics can show the real message list a "the model
+/// forgot everything" report can't otherwise be distinguished from without
+/// reading logs.
+pub struct RequestSnapshot {
+    pub conversation_id: i64,
+    pub provider_id: String,
+    pub model: String,
+    pub message_roles: Vec<String>,
+    pub used_tokens: u32,
+    pub budget_tokens: u32,
+    pub dropped_count: usize,
+}
+
 pub struct AppState {
     pub db: Mutex<Connection>,
     pub settings: Mutex<Settings>,
     pub active_streams: Mutex<HashMap<String, CancellationToken>>,
     pub model_cache: Mutex<HashMap<String, ModelCacheEntry>>,
+    pub last_request: Mutex<Option<RequestSnapshot>>,
     /// Problems hit during startup that were recovered from (settings reset to
     /// defaults, history running memory-only). Surfaced to the user via
     /// `get_diagnostics` so a degraded launch isn't silent.
@@ -64,5 +79,9 @@ impl AppState {
 
     pub fn model_cache(&self) -> MutexGuard<'_, HashMap<String, ModelCacheEntry>> {
         self.model_cache.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    pub fn last_request(&self) -> MutexGuard<'_, Option<RequestSnapshot>> {
+        self.last_request.lock().unwrap_or_else(|e| e.into_inner())
     }
 }

@@ -54,7 +54,7 @@ const COMPONENTS: Components = {
     }
     return (
       <code
-        className="rounded bg-[var(--code-bg)] px-1.5 py-0.5 font-mono text-[12.5px] text-[var(--code-fg)] border border-[var(--code-border)]"
+        className="rounded bg-[var(--code-bg)] px-1.5 py-0.5 font-mono text-[12.5px] text-[var(--code-fg)] border border-[var(--code-border)] break-words [overflow-wrap:anywhere]"
         {...rest}
       >
         {children}
@@ -146,7 +146,7 @@ const COMPONENTS: Components = {
 
 function MarkdownContentImpl({ content, highlight = true }: MarkdownContentProps) {
   return (
-    <div className="prose-chat text-[length:var(--chat-font-size)] leading-relaxed break-words">
+    <div className="prose-chat min-w-0 text-[length:var(--chat-font-size)] leading-relaxed break-words [overflow-wrap:anywhere]">
       <ReactMarkdown
         remarkPlugins={REMARK_PLUGINS}
         rehypePlugins={highlight ? REHYPE_PLUGINS : REHYPE_NONE}

@@ -5,6 +5,7 @@ import type {
   ContextUsage,
   Conversation,
   Diagnostics,
+  LastRequestInfo,
   Message,
   ModelInfo,
   ProviderConfig,
@@ -116,8 +117,23 @@ export const ipc = {
 
   testProvider: (providerId: string) => invoke<ProviderTestResult>('test_provider', { providerId }),
 
-  testMcpServer: (command: string, args: string[], env: Record<string, string>) =>
-    invoke<import('./types').McpTool[]>('test_mcp_server', { command, args, env }),
+  testMcpServer: (
+    transport: import('./types').McpTransport,
+    command: string,
+    args: string[],
+    env: Record<string, string>,
+    url: string,
+    headers: Record<string, string>,
+  ) =>
+    invoke<import('./types').McpTool[]>('test_mcp_server', {
+      transport,
+      command,
+      args,
+      env,
+      url,
+      headers,
+    }),
+
 
   listMcpTools: () => invoke<import('./types').McpTool[]>('list_mcp_tools'),
 
@@ -131,6 +147,7 @@ export const ipc = {
   openLogDir: () => invoke<void>('open_log_dir'),
 
   getDiagnostics: () => invoke<Diagnostics>('get_diagnostics'),
+  getLastRequest: () => invoke<LastRequestInfo | null>('get_last_request'),
   setWindowTheme: (themeType: string) => invoke<void>('set_window_theme', { themeType }),
 }
 

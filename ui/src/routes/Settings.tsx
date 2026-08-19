@@ -13,7 +13,7 @@ import { useSettingsStore } from '../store/settings'
 import { useThemeStore } from '../store/theme'
 import { ipc } from '../lib/ipc'
 import { useDebouncedCallback } from '../lib/utils'
-import type { ProviderConfig, Settings } from '../lib/types'
+import type { LastRequestInfo, ProviderConfig, Settings } from '../lib/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -742,6 +742,7 @@ function AppearancePane() {
 function ContextPane() {
   const settings = useSettingsStore((s) => s.settings)
   const setLocalSettings = useSettingsStore((s) => s.setLocalSettings)
+  const [lastRequest, setLastRequest] = useState<LastRequestInfo | null>(null)
 
   const debouncedPersist = useDebouncedCallback((next: Settings) => {
     void ipc.saveSettings(next)
@@ -750,6 +751,26 @@ function ContextPane() {
     setLocalSettings(next)
     debouncedPersist(next)
   }
+
+  useEffect(() => {
+    let cancelled = false
+    const poll = () => {
+      ipc
+        .getLastRequest()
+        .then((r) => {
+          if (!cancelled) setLastRequest(r)
+        })
+        .catch(() => {
+          // Advisory only - a failed poll just leaves the last known snapshot.
+        })
+    }
+    poll()
+    const id = setInterval(poll, 2000)
+    return () => {
+      cancelled = true
+      clearInterval(id)
+    }
+  }, [])
 
   if (!settings) return null
 
@@ -782,6 +803,55 @@ function ContextPane() {
           budget, the oldest messages are dropped first; pin a message to always keep it, or
           exclude one to keep it out of every request.
         </p>
+      </div>
+
+      <div className="rounded-lg border border-border/60 bg-card p-3">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <Label htmlFor="memory-enabled" className="text-xs font-medium text-foreground">
+              Rolling memory
+            </Label>
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              When history exceeds the budget, have the conversation's own provider compress the
+              oldest turns into a summary instead of dropping them silently. The summary is
+              injected into later requests so the model can still answer about earlier turns.
+            </p>
+          </div>
+          <Switch
+            id="memory-enabled"
+            checked={settings.memory_enabled}
+            onCheckedChange={(checked) => applyLive({ ...settings, memory_enabled: checked })}
+          />
+        </div>
+      </div>
+
+      <div className="rounded-lg border border-border/60 bg-card p-3">
+        <p className="mb-2 text-xs font-medium text-foreground">Last request</p>
+        {lastRequest ? (
+          <div className="space-y-1 text-[11px] text-muted-foreground">
+            <p>
+              Conversation #{lastRequest.conversation_id} · {lastRequest.provider_id} /{' '}
+              {lastRequest.model}
+            </p>
+            <p>
+              {lastRequest.message_roles.length} messages sent · {lastRequest.used_tokens} /{' '}
+              {lastRequest.budget_tokens} tokens used
+            </p>
+            {lastRequest.dropped_count > 0 && (
+              <p className="text-amber-500">
+                {lastRequest.dropped_count} earlier message
+                {lastRequest.dropped_count === 1 ? '' : 's'} dropped to fit the budget
+              </p>
+            )}
+            <p className="break-all font-mono text-[10px]">
+              {lastRequest.message_roles.join(' → ')}
+            </p>
+          </div>
+        ) : (
+          <p className="text-[11px] text-muted-foreground">
+            No request sent yet this session.
+          </p>
+        )}
       </div>
     </div>
   )

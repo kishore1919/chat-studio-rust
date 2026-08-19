@@ -43,17 +43,33 @@ fn default_true() -> bool {
     true
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum McpTransport {
+    #[default]
+    Stdio,
+    Http,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct McpServerConfig {
     pub id: String,
     pub name: String,
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    #[serde(default)]
+    pub transport: McpTransport,
+    // Stdio transport fields.
     pub command: String,
     #[serde(default)]
     pub args: Vec<String>,
     #[serde(default)]
     pub env: std::collections::BTreeMap<String, String>,
-    #[serde(default = "default_true")]
-    pub enabled: bool,
+    // HTTP transport fields.
+    #[serde(default)]
+    pub url: String,
+    #[serde(default)]
+    pub headers: std::collections::BTreeMap<String, String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -146,6 +162,10 @@ pub struct AgentConfig {
     pub enabled: bool,
 }
 
+fn default_mcp_servers() -> Vec<McpServerConfig> {
+    Vec::new()
+}
+
 fn default_agents() -> Vec<AgentConfig> {
     vec![
         AgentConfig {
@@ -218,7 +238,7 @@ pub struct Settings {
     pub font_size: u32,
     #[serde(default)]
     pub system_prompt: Option<String>,
-    #[serde(default)]
+    #[serde(default = "default_mcp_servers")]
     pub mcp_servers: Vec<McpServerConfig>,
     #[serde(default = "default_skills")]
     pub skills: Vec<Skill>,
@@ -232,6 +252,11 @@ pub struct Settings {
     /// overshooting a provider's real limit.
     #[serde(default = "default_context_tokens")]
     pub context_tokens: u32,
+    /// Rolling memory: when history exceeds `context_tokens`, compress the
+    /// dropped oldest turns into a summary instead of losing them. Off by
+    /// default so it can't change existing chats' behavior unasked.
+    #[serde(default)]
+    pub memory_enabled: bool,
 }
 
 fn default_theme() -> ThemePreference {
@@ -359,11 +384,12 @@ impl Default for Settings {
             border_visibility: default_border_visibility(),
             font_size: 16,
             system_prompt: None,
-            mcp_servers: Vec::new(),
+            mcp_servers: default_mcp_servers(),
             skills: default_skills(),
             agents: default_agents(),
             prompts: Vec::new(),
             context_tokens: default_context_tokens(),
+            memory_enabled: false,
         }
     }
 }

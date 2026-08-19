@@ -2,11 +2,13 @@ import { useState } from 'react'
 import {
   BoxesIcon,
   CheckIcon,
+  GlobeIcon,
   Loader2Icon,
   PencilIcon,
   PlusIcon,
   RefreshCwIcon,
   ServerIcon,
+  TerminalIcon,
   Trash2Icon,
   WrenchIcon,
   XCircleIcon,
@@ -27,32 +29,72 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 
-const MCP_PRESETS: { name: string; command: string; args: string[]; desc: string }[] = [
+type McpPreset = {
+  name: string
+  transport: McpServerConfig['transport']
+  command?: string
+  args?: string[]
+  url?: string
+  desc: string
+}
+
+const MCP_PRESETS: McpPreset[] = [
   {
     name: 'Filesystem',
+    transport: 'stdio',
     command: 'npx',
     args: ['-y', '@modelcontextprotocol/server-filesystem', '.'],
     desc: 'Provides secure read/write file access within allowed folders.',
   },
   {
     name: 'Fetch / Web Reader',
+    transport: 'stdio',
     command: 'npx',
     args: ['-y', '@modelcontextprotocol/server-fetch'],
     desc: 'Enables web scraping and content fetching via HTTP.',
   },
   {
     name: 'Memory',
+    transport: 'stdio',
     command: 'npx',
     args: ['-y', '@modelcontextprotocol/server-memory'],
     desc: 'Knowledge graph-based persistent memory.',
   },
   {
     name: 'SQLite',
+    transport: 'stdio',
     command: 'npx',
     args: ['-y', '@modelcontextprotocol/server-sqlite', '--db-path', './data.db'],
     desc: 'Query and explore local SQLite databases.',
   },
 ]
+
+const HTTP_PRESETS: McpPreset[] = [
+  {
+    name: 'Custom HTTP',
+    transport: 'http',
+    url: 'http://localhost:3000/mcp',
+    desc: 'Streamable HTTP MCP endpoint on your own server.',
+  },
+]
+
+function parseEnvString(input: string): Record<string, string> {
+  const out: Record<string, string> = {}
+  if (!input.trim()) return out
+  for (const line of input.split('\n')) {
+    const [k, ...v] = line.split('=')
+    if (k && v.length > 0) {
+      out[k.trim()] = v.join('=').trim()
+    }
+  }
+  return out
+}
+
+function formatEnvString(env: Record<string, string>): string {
+  return Object.entries(env ?? {})
+    .map(([k, v]) => `${k}=${v}`)
+    .join('\n')
+}
 
 export function McpPane() {
   const settings = useSettingsStore((s) => s.settings)
@@ -62,12 +104,17 @@ export function McpPane() {
   const [editingServer, setEditingServer] = useState<McpServerConfig | null>(null)
 
   const [name, setName] = useState('')
+  const [transport, setTransport] = useState<McpServerConfig['transport']>('stdio')
   const [command, setCommand] = useState('npx')
   const [argsStr, setArgsStr] = useState('')
   const [envStr, setEnvStr] = useState('')
+  const [url, setUrl] = useState('')
+  const [headersStr, setHeadersStr] = useState('')
 
   const [testingId, setTestingId] = useState<string | null>(null)
-  const [testResults, setTestResults] = useState<Record<string, { ok: boolean; tools?: McpTool[]; error?: string }>>({})
+  const [testResults, setTestResults] = useState<
+    Record<string, { ok: boolean; tools?: McpTool[]; error?: string }>
+  >({})
 
   const servers = settings?.mcp_servers ?? []
 
@@ -92,7 +139,14 @@ export function McpPane() {
   const handleTestServer = async (server: McpServerConfig) => {
     setTestingId(server.id)
     try {
-      const tools = await ipc.testMcpServer(server.command, server.args, server.env)
+      const tools = await ipc.testMcpServer(
+        server.transport,
+        server.command,
+        server.args,
+        server.env,
+        server.url,
+        server.headers,
+      )
       setTestResults((prev) => ({
         ...prev,
         [server.id]: { ok: true, tools },
@@ -107,78 +161,81 @@ export function McpPane() {
     }
   }
 
-  const handleApplyPreset = (preset: typeof MCP_PRESETS[0]) => {
+  const handleApplyPreset = (preset: McpPreset) => {
     setName(preset.name)
-    setCommand(preset.command)
-    setArgsStr(preset.args.join(' '))
+    setTransport(preset.transport)
+    setCommand(preset.command ?? 'npx')
+    setArgsStr(preset.args?.join(' ') ?? '')
+    setUrl(preset.url ?? '')
+    setEnvStr('')
+    setHeadersStr('')
+  }
+
+  const resetForm = () => {
+    setName('')
+    setTransport('stdio')
+    setCommand('npx')
+    setArgsStr('')
+    setEnvStr('')
+    setUrl('')
+    setHeadersStr('')
   }
 
   const openAdd = () => {
     setEditingServer(null)
-    setName('')
-    setCommand('npx')
-    setArgsStr('')
-    setEnvStr('')
+    resetForm()
     setModalOpen(true)
   }
 
   const openEdit = (server: McpServerConfig) => {
     setEditingServer(server)
     setName(server.name)
-    setCommand(server.command)
-    setArgsStr(server.args.join(' '))
-    const envLines = Object.entries(server.env ?? {})
-      .map(([k, v]) => `${k}=${v}`)
-      .join('\n')
-    setEnvStr(envLines)
+    setTransport(server.transport ?? 'stdio')
+    setCommand(server.command ?? 'npx')
+    setArgsStr(server.args?.join(' ') ?? '')
+    setEnvStr(formatEnvString(server.env ?? {}))
+    setUrl(server.url ?? '')
+    setHeadersStr(formatEnvString(server.headers ?? {}))
     setModalOpen(true)
   }
 
-  const handleSaveServer = () => {
-    if (!settings || !name.trim() || !command.trim()) return
-
-    const args = argsStr
-      .trim()
-      .split(/\s+/)
-      .filter((a) => a.length > 0)
-
-    const env: Record<string, string> = {}
-    if (envStr.trim()) {
-      for (const line of envStr.split('\n')) {
-        const [k, ...v] = line.split('=')
-        if (k && v.length > 0) {
-          env[k.trim()] = v.join('=').trim()
-        }
-      }
+  const buildServerConfig = (): McpServerConfig | null => {
+    if (!name.trim()) return null
+    const base: McpServerConfig = {
+      id: editingServer?.id ?? `mcp-${Date.now()}`,
+      name: name.trim(),
+      enabled: true,
+      transport,
+      command: command.trim(),
+      args: argsStr
+        .trim()
+        .split(/\s+/)
+        .filter((a) => a.length > 0),
+      env: parseEnvString(envStr),
+      url: url.trim(),
+      headers: parseEnvString(headersStr),
     }
+    if (transport === 'stdio' && !base.command) return null
+    if (transport === 'http' && !base.url) return null
+    return base
+  }
+
+  const handleSaveServer = () => {
+    if (!settings) return
+    const server = buildServerConfig()
+    if (!server) return
 
     if (editingServer) {
-      const updated = servers.map((s) =>
-        s.id === editingServer.id
-          ? {
-              ...s,
-              name: name.trim(),
-              command: command.trim(),
-              args,
-              env,
-            }
-          : s,
-      )
+      const updated = servers.map((s) => (s.id === editingServer.id ? server : s))
       save({ ...settings, mcp_servers: updated })
     } else {
-      const newServer: McpServerConfig = {
-        id: `mcp-${Date.now()}`,
-        name: name.trim(),
-        command: command.trim(),
-        args,
-        env,
-        enabled: true,
-      }
-      save({ ...settings, mcp_servers: [...servers, newServer] })
+      save({ ...settings, mcp_servers: [...servers, server] })
     }
 
     setModalOpen(false)
   }
+
+  const isFormValid = name.trim() && (transport === 'stdio' ? command.trim() : url.trim())
 
   return (
     <div className="max-w-3xl space-y-6">
@@ -186,7 +243,7 @@ export function McpPane() {
         <div>
           <h2 className="text-base font-semibold text-foreground">Model Context Protocol (MCP)</h2>
           <p className="text-xs text-muted-foreground">
-            Connect local and remote tools, filesystem connectors, APIs, and databases via MCP stdio servers.
+            Connect local stdio servers or remote streamable HTTP MCP endpoints for tool calling.
           </p>
         </div>
         <Button size="sm" onClick={openAdd} className="gap-1.5 text-xs">
@@ -201,14 +258,9 @@ export function McpPane() {
             <ServerIcon className="mx-auto size-8 text-muted-foreground/50 mb-2" />
             <p className="text-xs text-muted-foreground font-medium">No MCP servers added yet.</p>
             <p className="text-[11px] text-muted-foreground/70 mt-1">
-              Add servers like Filesystem, Fetch, or custom tools to empower the model with real-time abilities.
+              Add stdio executables or streamable HTTP endpoints to give the model real-time tools.
             </p>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={openAdd}
-              className="mt-3 text-xs"
-            >
+            <Button variant="outline" size="sm" onClick={openAdd} className="mt-3 text-xs">
               <PlusIcon className="size-3.5 mr-1" /> Add your first server
             </Button>
           </div>
@@ -216,6 +268,10 @@ export function McpPane() {
           servers.map((server) => {
             const isTesting = testingId === server.id
             const result = testResults[server.id]
+            const endpointLabel =
+              server.transport === 'http'
+                ? server.url
+                : `${server.command} ${server.args.join(' ')}`
             return (
               <div
                 key={server.id}
@@ -224,12 +280,21 @@ export function McpPane() {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2.5">
                     <div className="flex size-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                      <ServerIcon className="size-4" />
+                      {server.transport === 'http' ? (
+                        <GlobeIcon className="size-4" />
+                      ) : (
+                        <TerminalIcon className="size-4" />
+                      )}
                     </div>
                     <div>
                       <div className="font-semibold text-foreground">{server.name}</div>
-                      <div className="font-mono text-[11px] text-muted-foreground truncate max-w-md">
-                        {server.command} {server.args.join(' ')}
+                      <div className="flex items-center gap-1.5">
+                        <span className="rounded bg-muted px-1 py-0.5 text-[10px] uppercase text-muted-foreground">
+                          {server.transport}
+                        </span>
+                        <div className="font-mono text-[11px] text-muted-foreground truncate max-w-md">
+                          {endpointLabel}
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -329,11 +394,10 @@ export function McpPane() {
           <DialogHeader>
             <DialogTitle>{editingServer ? 'Edit MCP Server' : 'Add MCP Server'}</DialogTitle>
             <DialogDescription>
-              Configure an MCP server executable to run via stdio.
+              Configure an MCP server via stdio command or streamable HTTP endpoint.
             </DialogDescription>
           </DialogHeader>
 
-          {/* Quick Presets */}
           {!editingServer && (
             <div className="space-y-1.5">
               <Label className="text-xs text-muted-foreground">Quick Presets</Label>
@@ -348,6 +412,21 @@ export function McpPane() {
                     className="h-6.5 text-[11px] px-2"
                   >
                     <BoxesIcon className="size-3 mr-1 text-primary" />
+                    {preset.name}
+                  </Button>
+                ))}
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {HTTP_PRESETS.map((preset) => (
+                  <Button
+                    key={preset.name}
+                    variant="outline"
+                    size="sm"
+                    type="button"
+                    onClick={() => handleApplyPreset(preset)}
+                    className="h-6.5 text-[11px] px-2"
+                  >
+                    <GlobeIcon className="size-3 mr-1 text-primary" />
                     {preset.name}
                   </Button>
                 ))}
@@ -367,24 +446,75 @@ export function McpPane() {
             </div>
 
             <div className="space-y-1">
-              <Label className="text-xs">Command</Label>
-              <Input
-                value={command}
-                onChange={(e) => setCommand(e.target.value)}
-                placeholder="e.g. npx, uvx, python, node"
-                className="h-8 text-xs font-mono"
-              />
+              <Label className="text-xs">Transport</Label>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant={transport === 'stdio' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setTransport('stdio')}
+                  className="h-7 text-[11px] gap-1"
+                >
+                  <TerminalIcon className="size-3" /> Stdio
+                </Button>
+                <Button
+                  type="button"
+                  variant={transport === 'http' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setTransport('http')}
+                  className="h-7 text-[11px] gap-1"
+                >
+                  <GlobeIcon className="size-3" /> HTTP
+                </Button>
+              </div>
             </div>
 
-            <div className="space-y-1">
-              <Label className="text-xs">Arguments (space-separated)</Label>
-              <Input
-                value={argsStr}
-                onChange={(e) => setArgsStr(e.target.value)}
-                placeholder="-y @modelcontextprotocol/server-filesystem C:\my-folder"
-                className="h-8 text-xs font-mono"
-              />
-            </div>
+            {transport === 'stdio' ? (
+              <>
+                <div className="space-y-1">
+                  <Label className="text-xs">Command</Label>
+                  <Input
+                    value={command}
+                    onChange={(e) => setCommand(e.target.value)}
+                    placeholder="e.g. npx, uvx, python, node"
+                    className="h-8 text-xs font-mono"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <Label className="text-xs">Arguments (space-separated)</Label>
+                  <Input
+                    value={argsStr}
+                    onChange={(e) => setArgsStr(e.target.value)}
+                    placeholder="-y @modelcontextprotocol/server-filesystem C:\my-folder"
+                    className="h-8 text-xs font-mono"
+                  />
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="space-y-1">
+                  <Label className="text-xs">Endpoint URL</Label>
+                  <Input
+                    value={url}
+                    onChange={(e) => setUrl(e.target.value)}
+                    placeholder="http://localhost:3000/mcp"
+                    className="h-8 text-xs font-mono"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <Label className="text-xs">Custom Headers (KEY=VALUE per line)</Label>
+                  <textarea
+                    value={headersStr}
+                    onChange={(e) => setHeadersStr(e.target.value)}
+                    placeholder="Authorization=Bearer token&#10;X-Custom=foo"
+                    rows={2}
+                    className="w-full rounded-md border border-input bg-transparent px-3 py-1.5 text-xs font-mono shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  />
+                </div>
+              </>
+            )}
 
             <div className="space-y-1">
               <Label className="text-xs">Environment Variables (KEY=VALUE per line)</Label>
@@ -402,7 +532,7 @@ export function McpPane() {
             <Button variant="outline" onClick={() => setModalOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleSaveServer} disabled={!name.trim() || !command.trim()}>
+            <Button onClick={handleSaveServer} disabled={!isFormValid}>
               {editingServer ? 'Save Changes' : 'Add Server'}
             </Button>
           </DialogFooter>

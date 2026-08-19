@@ -17,13 +17,18 @@ export interface ProviderConfig {
   disable_stream_options: boolean
 }
 
+export type McpTransport = 'stdio' | 'http'
+
 export interface McpServerConfig {
   id: string
   name: string
+  enabled: boolean
+  transport: McpTransport
   command: string
   args: string[]
   env: Record<string, string>
-  enabled: boolean
+  url: string
+  headers: Record<string, string>
 }
 
 export interface McpTool {
@@ -86,6 +91,9 @@ export interface Settings {
   prompts: PromptTemplate[]
   /** Soft budget (in tokens) for how much history is sent per turn. */
   context_tokens: number
+  /** Rolling memory: compress dropped old turns into a summary instead of
+   * losing them. Mirrors `Settings.memory_enabled` - off by default. */
+  memory_enabled: boolean
 }
 
 export interface Conversation {
@@ -98,6 +106,11 @@ export interface Conversation {
   pinned: boolean
   created_at: number
   updated_at: number
+  /** Rolling memory - compressed text of the oldest dropped turns. Null until
+   * a budget drop triggers one. */
+  summary: string | null
+  /** Rowid of the newest message `summary` covers. */
+  summarized_through_id: number | null
 }
 
 export type Role = 'user' | 'assistant' | 'system'
@@ -124,6 +137,9 @@ export interface ContextUsage {
   used_tokens: number
   budget_tokens: number
   dropped_count: number
+  /** Tokens spent on system-role content (system prompt + injected summary) -
+   * surfaced so a long skill prompt is attributable as the cause of drops. */
+  system_tokens: number
 }
 
 export interface ModelInfo {
@@ -176,4 +192,17 @@ export interface Diagnostics {
   /** Recovered startup failures - corrupt settings, unopenable history. Shown
    * to the user once on mount so a degraded launch is never silent. */
   startup_warnings: string[]
+}
+
+/** Snapshot of the most recent request assembled by `prepare_chat` - lets
+ * Settings show what was actually sent instead of guessing. Null until the
+ * first message of the session. */
+export interface LastRequestInfo {
+  conversation_id: number
+  provider_id: string
+  model: string
+  message_roles: string[]
+  used_tokens: number
+  budget_tokens: number
+  dropped_count: number
 }
