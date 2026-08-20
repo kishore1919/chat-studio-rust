@@ -4,13 +4,13 @@ import {
   GitBranchIcon,
   RotateCcwIcon,
   SearchIcon,
-  SparklesIcon,
   UserIcon,
   XIcon,
   ZoomInIcon,
   ZoomOutIcon,
 } from 'lucide-react'
 import { useChatStore, useConversationMessages } from '../store/chat'
+
 import type { Message } from '../lib/types'
 import { TIME_FMT } from '../lib/utils'
 import { Button } from '@/components/ui/button'
@@ -157,7 +157,7 @@ export function MindMapPanel({ onClose, onSelectMessage }: MindMapPanelProps) {
             {/* Root Conversation Node */}
             <div className="relative mb-6 rounded-xl border border-primary/30 bg-primary/10 p-2.5 shadow-xs">
               <div className="flex items-center gap-1.5 text-xs font-semibold text-primary">
-                <SparklesIcon className="size-3.5 shrink-0" />
+                <GitBranchIcon className="size-3.5 shrink-0" />
                 <span className="truncate">{activeConv?.title || 'Chat Conversation'}</span>
               </div>
               <div className="mt-1 text-[10px] text-muted-foreground">
@@ -166,6 +166,7 @@ export function MindMapPanel({ onClose, onSelectMessage }: MindMapPanelProps) {
               {/* Connecting line anchor */}
               <div aria-hidden="true" className="absolute -bottom-6 left-6 h-6 w-0.5 bg-gradient-to-b from-primary/50 to-border" />
             </div>
+
 
             {/* Input Message Line Tree */}
             <div className="relative pl-6 space-y-4">

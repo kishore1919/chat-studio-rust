@@ -8,11 +8,11 @@ A lightweight Tauri v2 desktop chat client for **Ollama**, **OpenRouter**, **NVI
 
 ---
 
-## ✨ Features
+### Features
 
 | Category | Details |
 |----------|---------|
-| **Multi-provider** | Ollama (native + cloud), OpenRouter, NVIDIA NIM, OpenAI, Anthropic, Gemini, custom OpenAI-compatible endpoints |
+| **Multi-provider** | Ollama (native + cloud), OpenRouter, NVIDIA NIM, OpenAI, Anthropic, Google Gemini, custom OpenAI-compatible endpoints |
 | **Streaming** | Token-level streaming with ~40 ms batched IPC (avoids per-token jank) |
 | **Local history** | SQLite database with schema migrations — conversations persist across restarts |
 | **MCP support** | Model Context Protocol servers (stdio transport) for tool calling |
@@ -24,7 +24,7 @@ A lightweight Tauri v2 desktop chat client for **Ollama**, **OpenRouter**, **NVI
 
 ---
 
-## 🏗 Architecture
+## Architecture
 
 ```
 chat_studio/
@@ -87,7 +87,7 @@ Cancellation and mid-stream errors **still persist whatever text arrived** (see 
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
 
@@ -125,7 +125,7 @@ Output: `src-tauri/target/release/bundle/` (NSIS/.msi on Windows, .dmg on macOS,
 
 ---
 
-## 🛠 Development Commands
+## Development Commands
 
 All commands available via `make` (run `make help`):
 
@@ -146,7 +146,7 @@ All commands available via `make` (run `make help`):
 
 ---
 
-## ⚙️ Configuration
+## Configuration
 
 Settings are stored in `settings.toml` at:
 
@@ -185,7 +185,7 @@ enabled = true
 
 ---
 
-## 🧪 Testing
+## Testing
 
 ### Rust (backend)
 
@@ -207,7 +207,7 @@ No test framework configured — correctness enforced by:
 
 ---
 
-## 📦 Dependencies
+## Dependencies
 
 ### Rust (key crates)
 
@@ -226,7 +226,7 @@ No test framework configured — correctness enforced by:
 ### Frontend (key packages)
 
 | Package | Purpose |
-|---------|---------|
+|-------|---------|
 | `react` 19 / `react-dom` 19 | UI |
 | `zustand` | State management |
 | `@tauri-apps/api` | Tauri IPC |
@@ -241,7 +241,7 @@ No test framework configured — correctness enforced by:
 
 ---
 
-## 🐛 Known Gotchas
+## Known Gotchas
 
 | Issue | Workaround |
 |-------|------------|
@@ -252,7 +252,7 @@ No test framework configured — correctness enforced by:
 
 ---
 
-## 🤝 Contributing
+## Contributing
 
 1. Read `AGENTS.md` (guiding principles, conventions, architecture notes)
 2. Run `make check` before committing — it runs the full CI pipeline
@@ -268,13 +268,13 @@ No test framework configured — correctness enforced by:
 
 ---
 
-## 📄 License
+## License
 
 MIT License — see [LICENSE](LICENSE) for details.
 
 ---
 
-## 🙏 Acknowledgments
+## Acknowledgments
 
 - [Tauri](https://tauri.app/) — desktop framework
 - [shadcn/ui](https://ui.shadcn.com/) — component patterns

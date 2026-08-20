@@ -80,6 +80,8 @@ export function MessageList({ conversationId, targetMessageId }: MessageListProp
     })
   }, [targetMessageId])
 
+  const lastUserMessageId = [...messages].reverse().find((m) => m.role === 'user')?.id ?? null
+
   const handleScrollToMessage = (messageId: number) => {
     const targetIndex = messages.findIndex((m) => m.id === messageId)
     if (targetIndex !== -1 && virtuosoRef.current) {
@@ -117,7 +119,7 @@ export function MessageList({ conversationId, targetMessageId }: MessageListProp
           // caught error state from whatever Virtuoso previously rendered at
           // this same list position.
           <MessageErrorBoundary key={message.id} fallbackText={message.content}>
-            <MessageBubble message={message} />
+            <MessageBubble message={message} isLastUserMessage={message.id === lastUserMessageId} />
           </MessageErrorBoundary>
         )}
         components={{

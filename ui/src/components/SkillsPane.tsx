@@ -9,8 +9,9 @@ import {
   Loader2Icon,
   PencilIcon,
   PlusIcon,
-  SparklesIcon,
   Trash2Icon,
+  WrenchIcon,
+  ZapIcon,
 } from 'lucide-react'
 import { useSettingsStore } from '../store/settings'
 import { ipc } from '../lib/ipc'
@@ -40,10 +41,13 @@ function getSkillIcon(icon: string) {
       return <LanguagesIcon className="size-4 text-primary" />
     case 'globe':
       return <GlobeIcon className="size-4 text-primary" />
+    case 'zap':
+      return <ZapIcon className="size-4 text-primary" />
     default:
-      return <SparklesIcon className="size-4 text-primary" />
+      return <WrenchIcon className="size-4 text-primary" />
   }
 }
+
 
 type FilterTab = 'all' | 'builtin' | 'global' | 'custom'
 
@@ -150,7 +154,7 @@ export function SkillsPane() {
         slash_command: cleanSlash,
         description: description.trim(),
         system_prompt: systemPrompt.trim(),
-        icon: 'sparkles',
+        icon: 'wrench',
         enabled: true,
         source: 'custom',
         path: null,

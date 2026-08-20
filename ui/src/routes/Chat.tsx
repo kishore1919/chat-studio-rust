@@ -5,6 +5,7 @@ import { MessageList } from '../components/MessageList'
 import { Composer } from '../components/Composer'
 import { EmptyChatState } from '../components/EmptyChatState'
 import { MindMapPanel } from '../components/MindMapPanel'
+import { ShortcutsDialog } from '../components/ShortcutsDialog'
 import { useChatStore } from '../store/chat'
 
 interface ChatProps {
@@ -22,6 +23,7 @@ export function Chat({ onOpenSettings }: ChatProps) {
   )
   const [mindMapOpen, setMindMapOpen] = useState(false)
   const [targetMessageId, setTargetMessageId] = useState<number | null>(null)
+  const [shortcutsOpen, setShortcutsOpen] = useState(false)
   const activeConversationId = useChatStore((s) => s.activeConversationId)
 
   useEffect(() => {
@@ -48,6 +50,9 @@ export function Chat({ onOpenSettings }: ChatProps) {
       } else if ((e.ctrlKey || e.metaKey) && (e.key === 'b' || e.key === 'B')) {
         e.preventDefault()
         setSidebarCollapsed((v) => !v)
+      } else if ((e.ctrlKey || e.metaKey) && e.key === '/') {
+        e.preventDefault()
+        setShortcutsOpen((v) => !v)
       }
     }
     window.addEventListener('keydown', handler)
@@ -94,6 +99,7 @@ export function Chat({ onOpenSettings }: ChatProps) {
           )}
         </div>
       </div>
+      <ShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
     </div>
   )
 }

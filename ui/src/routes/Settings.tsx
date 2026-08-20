@@ -1,19 +1,31 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   ArrowLeftIcon,
+  BotIcon,
+  CableIcon,
   CheckIcon,
   CopyIcon,
+  DatabaseIcon,
   EyeIcon,
   EyeOffIcon,
+  FolderOpenIcon,
+  MessageSquareTextIcon,
+  PaletteIcon,
+  PlugIcon,
   PlusIcon,
   RefreshCwIcon,
+  SparklesIcon,
   Trash2Icon,
+  UploadIcon,
+  WandSparklesIcon,
+  type LucideIcon,
 } from 'lucide-react'
 import { useSettingsStore } from '../store/settings'
 import { useThemeStore } from '../store/theme'
 import { ipc } from '../lib/ipc'
 import { useDebouncedCallback } from '../lib/utils'
-import type { LastRequestInfo, ProviderConfig, Settings } from '../lib/types'
+import { ProviderIcon } from '../lib/providerIcon'
+import type { LastRequestInfo, ProviderConfig, Settings, ThemeMeta } from '../lib/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -48,12 +60,12 @@ type NavSection =
   | 'appearance'
   | 'context'
 
-const NAV_GROUPS: { label: string; items: { id: NavSection; label: string }[] }[] = [
+const NAV_GROUPS: { label: string; items: { id: NavSection; label: string; icon: LucideIcon }[] }[] = [
   {
     label: 'Providers',
     items: [
-      { id: 'model-provider', label: 'Model Provider' },
-      { id: 'default-model', label: 'Default Model' },
+      { id: 'model-provider', label: 'Model Provider', icon: CableIcon },
+      { id: 'default-model', label: 'Default Model', icon: SparklesIcon },
     ],
   },
   {
@@ -62,17 +74,17 @@ const NAV_GROUPS: { label: string; items: { id: NavSection; label: string }[] }[
       // Gated behind lib/features.ts until each has real backend wiring
       // (both now apply via `set_conversation_system_prompt`). Prompts has
       // no flag - it's a real feature from the start.
-      ...(FEATURES.agents ? [{ id: 'agents' as const, label: 'Agents & Assistants' }] : []),
-      ...(FEATURES.skills ? [{ id: 'skills' as const, label: 'Skills' }] : []),
-      { id: 'prompts', label: 'Prompts' },
-      { id: 'mcp', label: 'MCP Servers' },
+      ...(FEATURES.agents ? [{ id: 'agents' as const, label: 'Agents & Assistants', icon: BotIcon }] : []),
+      ...(FEATURES.skills ? [{ id: 'skills' as const, label: 'Skills', icon: WandSparklesIcon }] : []),
+      { id: 'prompts', label: 'Prompts', icon: MessageSquareTextIcon },
+      { id: 'mcp', label: 'MCP Servers', icon: PlugIcon },
     ],
   },
   {
     label: 'Preferences',
     items: [
-      { id: 'appearance', label: 'Appearance' },
-      { id: 'context', label: 'Context' },
+      { id: 'appearance', label: 'Appearance', icon: PaletteIcon },
+      { id: 'context', label: 'Context', icon: DatabaseIcon },
     ],
   },
 ]
@@ -117,12 +129,13 @@ export function Settings({ onBack }: SettingsProps) {
                   onClick={() => setSection(item.id)}
                   aria-current={section === item.id ? 'page' : undefined}
                   className={cn(
-                    'block w-full cursor-pointer rounded-lg border px-2.5 py-1.5 text-left text-[13px] font-semibold transition-colors',
+                    'flex w-full cursor-pointer items-center gap-2 rounded-lg border px-2.5 py-1.5 text-left text-[13px] font-semibold transition-colors',
                     section === item.id
                       ? 'border-primary/40 bg-primary/20 font-bold text-primary shadow-xs'
                       : 'border-transparent text-foreground hover:bg-accent hover:text-foreground',
                   )}
                 >
+                  <item.icon className="size-3.5 shrink-0" aria-hidden="true" />
                   {item.label}
                 </button>
               ))}
@@ -271,7 +284,10 @@ function ModelProviderPane() {
                   : 'border-transparent text-foreground font-semibold hover:bg-accent hover:text-foreground',
               )}
             >
-              <span className="truncate">{p.display_name}</span>
+              <span className="flex min-w-0 items-center gap-1.5">
+                <ProviderIcon dialect={p.dialect} className="size-3.5 shrink-0" />
+                <span className="truncate">{p.display_name}</span>
+              </span>
               {p.enabled && <span className="ml-1 size-1.5 shrink-0 rounded-full bg-[var(--success)]" />}
             </button>
           ))}
@@ -366,9 +382,12 @@ function ProviderDetail({ provider }: { provider: ProviderConfig }) {
   return (
     <div className="w-full space-y-4">
       <div className="flex items-center justify-between border-b border-border pb-3">
-        <div>
-          <h2 className="text-base font-semibold text-foreground">{provider.display_name}</h2>
-          <span className="text-[11px] text-muted-foreground font-mono">Dialect: {provider.dialect}</span>
+        <div className="flex items-center gap-2.5">
+          <ProviderIcon dialect={provider.dialect} className="size-6" />
+          <div>
+            <h2 className="text-base font-semibold text-foreground">{provider.display_name}</h2>
+            <span className="text-[11px] text-muted-foreground font-mono">Dialect: {provider.dialect}</span>
+          </div>
         </div>
         <div className="flex items-center gap-2">
           <Switch checked={provider.enabled} onCheckedChange={(checked) => persist({ enabled: checked })} />
@@ -577,7 +596,10 @@ function DefaultModelPane() {
           <SelectContent>
             {enabledProviders.map((p) => (
               <SelectItem key={p.id} value={p.id}>
-                {p.display_name}
+                <span className="flex items-center gap-1.5">
+                  <ProviderIcon dialect={p.dialect} className="size-3.5" />
+                  {p.display_name}
+                </span>
               </SelectItem>
             ))}
           </SelectContent>
@@ -624,6 +646,13 @@ function AppearancePane() {
   const setLocalSettings = useSettingsStore((s) => s.setLocalSettings)
   const themeId = useThemeStore((s) => s.themeId)
 
+  const [themes, setThemes] = useState<ThemeMeta[]>([])
+  const [importing, setImporting] = useState(false)
+
+  useEffect(() => {
+    ipc.listThemes().then(setThemes).catch(() => {})
+  }, [])
+
   // Applies on every tick for responsiveness; only the IPC write collapses to
   // the last value once the drag/slide stops for 250ms. Without this, a drag
   // fired a full `save_settings` round-trip (serializing the whole settings
@@ -644,6 +673,34 @@ function AppearancePane() {
   const handleAccentChange = async (accent: string | null) => {
     useThemeStore.getState().setAccent(accent)
     await save({ ...settings!, accent })
+  }
+
+  const handleImportTheme = async () => {
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = '.json'
+    input.onchange = async () => {
+      const file = input.files?.[0]
+      if (!file) return
+      setImporting(true)
+      try {
+        const content = await file.text()
+        const id = file.name.replace(/\.json$/i, '')
+        await ipc.importThemeContent(id, content, false)
+        const updated = await ipc.listThemes()
+        setThemes(updated)
+      } catch {
+        // Import errors surface as the invoke rejection message
+      } finally {
+        setImporting(false)
+      }
+    }
+    input.click()
+  }
+
+  const handleDeleteTheme = async (id: string) => {
+    await ipc.deleteCustomTheme(id)
+    setThemes((prev) => prev.filter((t) => t.id !== id))
   }
 
   if (!settings) return null
@@ -734,6 +791,63 @@ function AppearancePane() {
           <span className={`transition-colors ${settings.font_size === 16 ? 'font-medium text-primary' : ''}`}>Default (16)</span>
           <span>18</span>
         </div>
+      </div>
+
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <Label className="text-xs font-medium text-foreground">Custom Themes</Label>
+          <div className="flex items-center gap-1.5">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 gap-1.5 text-xs"
+              onClick={handleImportTheme}
+              disabled={importing}
+            >
+              <UploadIcon className="size-3" />
+              Import VS Code Theme
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              className="size-7 text-muted-foreground hover:text-foreground"
+              onClick={() => void ipc.openThemesDir()}
+              title="Open themes folder"
+            >
+              <FolderOpenIcon className="size-3.5" />
+            </Button>
+          </div>
+        </div>
+        {themes.length === 0 ? (
+          <p className="text-xs text-muted-foreground py-2">
+            No custom themes installed. Import a VS Code color theme (.json) to get started.
+          </p>
+        ) : (
+          <div className="space-y-1">
+            {themes.map((t) => (
+              <div
+                key={t.id}
+                className="flex items-center justify-between rounded-lg border border-border/60 bg-card px-3 py-2"
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="text-xs font-medium text-foreground truncate">{t.name}</span>
+                  <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                    {t.type}
+                  </span>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  className="size-6 text-muted-foreground hover:text-destructive"
+                  onClick={() => void handleDeleteTheme(t.id)}
+                  title="Delete theme"
+                >
+                  <Trash2Icon className="size-3" />
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   )

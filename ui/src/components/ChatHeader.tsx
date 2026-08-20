@@ -1,28 +1,24 @@
 import { useState } from 'react'
 import {
-  BotIcon,
-  BrainIcon,
-  CodeIcon,
+  DownloadIcon,
   EraserIcon,
   GitBranchIcon,
   MenuIcon,
-  SearchIcon,
   SettingsIcon,
-  SparklesIcon,
 } from 'lucide-react'
-import { useChatStore } from '../store/chat'
+import { useChatStore, useConversationMessages } from '../store/chat'
 import { useSettingsStore } from '../store/settings'
 import { cn } from '../lib/utils'
 import { FEATURES } from '../lib/features'
+import { formatConversationMarkdown } from '../lib/exportMarkdown'
+import { ProviderIcon } from '../lib/providerIcon'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import {
   Select,
   SelectContent,
   SelectGroup,
   SelectItem,
   SelectLabel,
-  SelectSeparator,
   SelectTrigger,
 } from '@/components/ui/select'
 import {
@@ -41,23 +37,7 @@ interface ChatHeaderProps {
   onToggleMindMap?: () => void
 }
 
-const CUSTOM_MODEL_VALUE = '__custom__'
 const VALUE_SEP = ':::'
-
-function getAgentIcon(icon: string) {
-  switch (icon) {
-    case 'code':
-      return <CodeIcon className="size-3.5 text-primary shrink-0" />
-    case 'search':
-      return <SearchIcon className="size-3.5 text-primary shrink-0" />
-    case 'brain':
-      return <BrainIcon className="size-3.5 text-primary shrink-0" />
-    case 'sparkles':
-      return <SparklesIcon className="size-3.5 text-primary shrink-0" />
-    default:
-      return <BotIcon className="size-3.5 text-primary shrink-0" />
-  }
-}
 
 export function ChatHeader({
   onToggleSidebar,
@@ -74,38 +54,27 @@ export function ChatHeader({
   const modelsByProvider = useSettingsStore((s) => s.modelsByProvider)
   const refreshModels = useSettingsStore((s) => s.refreshModels)
   const active = conversations.find((c) => c.id === activeConversationId)
-
-  const [draftProvider, setDraftProvider] = useState('')
-  const [draftModel, setDraftModel] = useState('')
+  const messages = useConversationMessages(activeConversationId ?? -1)
 
   const [confirmClear, setConfirmClear] = useState(false)
-  const [customModelOpen, setCustomModelOpen] = useState(false)
 
   const agents = settings?.agents?.filter((a) => a.enabled) ?? []
   const conversationAgentId = active?.agent_id || activeAgentId || 'general-assistant'
   const currentAgent = agents.find((a) => a.id === conversationAgentId) ?? agents[0]
 
-  const suggestions = modelsByProvider[draftProvider] ?? []
   const enabledProviders = settings?.providers.filter((p) => p.enabled) ?? []
   const activeProvider = settings?.providers.find((p) => p.id === active?.provider)
 
   const handleSelect = (value: string) => {
     if (!active) return
-    if (value === CUSTOM_MODEL_VALUE) {
-      setDraftProvider(active.provider)
-      setDraftModel(active.model)
-      setCustomModelOpen(true)
-      return
-    }
     const [providerId, modelId] = value.split(VALUE_SEP)
     setConversationModel(active.id, providerId, modelId)
   }
 
-  const commitCustomModel = () => {
-    if (active && draftModel.trim()) {
-      setConversationModel(active.id, draftProvider, draftModel.trim())
-    }
-    setCustomModelOpen(false)
+  const handleExport = () => {
+    if (!active || messages.length === 0) return
+    const md = formatConversationMarkdown(active.title, messages)
+    navigator.clipboard.writeText(md)
   }
 
   return (
@@ -126,12 +95,9 @@ export function ChatHeader({
           {/* Assistant Badge - Fixed to this conversation */}
           {FEATURES.agents && (
             <div
-              className="flex h-7 items-center gap-1.5 rounded-md bg-accent/40 px-2.5 text-xs font-semibold text-foreground border border-border/30"
+              className="flex h-7 items-center rounded-md bg-accent/40 px-2.5 text-xs font-semibold text-foreground border border-border/30"
               title={`Assistant: ${currentAgent?.name ?? 'Default Assistant'} (locked to this chat)`}
             >
-              <span className="size-4 rounded bg-primary/20 flex items-center justify-center">
-                {getAgentIcon(currentAgent?.icon ?? 'bot')}
-              </span>
               <span className="truncate max-w-[150px]">{currentAgent?.name ?? 'Default Assistant'}</span>
             </div>
           )}
@@ -153,13 +119,11 @@ export function ChatHeader({
                   size="sm"
                   className="h-7 max-w-56 border-0 bg-transparent px-1.5 shadow-none hover:bg-accent/50 text-xs"
                 >
-                  <span className="flex items-center gap-1 truncate">
-                    <SparklesIcon className="size-3 text-primary shrink-0" />
-                    <span>
-                      {activeProvider?.display_name ?? active.provider}
-                      {' · '}
-                      <span className="text-muted-foreground">{active.model || 'select model...'}</span>
-                    </span>
+                  <span className="flex min-w-0 items-center gap-1.5 truncate">
+                    {activeProvider && <ProviderIcon dialect={activeProvider.dialect} className="size-3.5 shrink-0" />}
+                    {activeProvider?.display_name ?? active.provider}
+                    {' · '}
+                    <span className="text-muted-foreground">{active.model || 'select model...'}</span>
                   </span>
                 </SelectTrigger>
                 <SelectContent className="max-h-80 max-w-80">
@@ -169,7 +133,10 @@ export function ChatHeader({
                       p.id === active.provider && addedModels.includes(active.model)
                     return (
                       <SelectGroup key={p.id}>
-                        <SelectLabel className="font-semibold text-xs">{p.display_name}</SelectLabel>
+                        <SelectLabel className="flex items-center gap-1.5 font-semibold text-xs">
+                          <ProviderIcon dialect={p.dialect} className="size-3.5" />
+                          {p.display_name}
+                        </SelectLabel>
                         {p.id === active.provider && active.model && !hasCurrent && (
                           <SelectItem value={`${p.id}${VALUE_SEP}${active.model}`}>
                             {active.model}
@@ -189,46 +156,10 @@ export function ChatHeader({
                       </SelectGroup>
                     )
                   })}
-                  <SelectSeparator />
-                  <SelectItem value={CUSTOM_MODEL_VALUE}>Custom model...</SelectItem>
                 </SelectContent>
               </Select>
             </div>
           )}
-
-          <Dialog open={customModelOpen} onOpenChange={setCustomModelOpen}>
-            <DialogContent className="sm:max-w-md">
-              <DialogHeader>
-                <DialogTitle>Custom model</DialogTitle>
-                <DialogDescription>Enter the model ID to use for this conversation.</DialogDescription>
-              </DialogHeader>
-              <Input
-                autoFocus
-                value={draftModel}
-                onChange={(e) => setDraftModel(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') commitCustomModel()
-                  else if (e.key === 'Escape') setCustomModelOpen(false)
-                }}
-                list="model-suggestions-custom"
-                placeholder="e.g. gpt-4o, claude-3-5-sonnet"
-                className="h-8 font-mono text-xs"
-              />
-              <datalist id="model-suggestions-custom">
-                {suggestions.map((m) => (
-                  <option key={m.id} value={m.id} />
-                ))}
-              </datalist>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setCustomModelOpen(false)}>
-                  Cancel
-                </Button>
-                <Button onClick={commitCustomModel} disabled={!draftModel.trim()}>
-                  Use model
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
         </div>
       </div>
 
@@ -248,6 +179,18 @@ export function ChatHeader({
             title="Toggle Mind Map (Input Flow)"
           >
             <GitBranchIcon className="size-4" />
+          </Button>
+        )}
+        {active && messages.length > 0 && (
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            onClick={handleExport}
+            aria-label="Copy conversation as Markdown"
+            className="size-8 text-muted-foreground hover:text-foreground"
+            title="Copy as Markdown"
+          >
+            <DownloadIcon className="size-4" />
           </Button>
         )}
         {active && (

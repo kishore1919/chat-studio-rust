@@ -13,6 +13,7 @@ import type {
   Settings,
   StreamEvent,
   StreamHandle,
+  ThemeMeta,
 } from './types'
 
 // Typed wrappers over the #[tauri::command] surface in src-tauri/src/commands.rs.
@@ -149,6 +150,12 @@ export const ipc = {
   getDiagnostics: () => invoke<Diagnostics>('get_diagnostics'),
   getLastRequest: () => invoke<LastRequestInfo | null>('get_last_request'),
   setWindowTheme: (themeType: string) => invoke<void>('set_window_theme', { themeType }),
+
+  listThemes: () => invoke<ThemeMeta[]>('list_themes'),
+  importThemeContent: (themeId: string, content: string, overwrite: boolean) =>
+    invoke<ThemeMeta>('import_theme_content', { themeId, content, overwrite }),
+  deleteCustomTheme: (themeId: string) => invoke<void>('delete_custom_theme', { themeId }),
+  openThemesDir: () => invoke<void>('open_themes_dir'),
 }
 
 /** Subscribes to the coalesced delta stream for one in-flight message. */

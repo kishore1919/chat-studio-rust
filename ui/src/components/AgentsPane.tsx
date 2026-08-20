@@ -6,9 +6,9 @@ import {
   PencilIcon,
   PlusIcon,
   SearchIcon,
-  SparklesIcon,
   Trash2Icon,
   UserCheckIcon,
+  ZapIcon,
 } from 'lucide-react'
 import { useSettingsStore } from '../store/settings'
 import type { AgentConfig } from '../lib/types'
@@ -33,12 +33,14 @@ function getAgentIcon(icon: string) {
       return <SearchIcon className="size-4 text-primary" />
     case 'brain':
       return <BrainIcon className="size-4 text-primary" />
+    case 'zap':
     case 'sparkles':
-      return <SparklesIcon className="size-4 text-primary" />
+      return <ZapIcon className="size-4 text-primary" />
     default:
       return <BotIcon className="size-4 text-primary" />
   }
 }
+
 
 export function AgentsPane() {
   const settings = useSettingsStore((s) => s.settings)
@@ -211,13 +213,14 @@ export function AgentsPane() {
                       key={skillId}
                       className="inline-flex items-center gap-1 rounded bg-accent/60 px-1.5 py-0.5 text-[10px] text-accent-foreground font-medium"
                     >
-                      <SparklesIcon className="size-2.5 text-primary" />
+                      <ZapIcon className="size-2.5 text-primary" />
                       {s ? s.name : skillId}
                     </span>
                   )
                 })}
               </div>
             )}
+
 
             {/* Prompt preview */}
             <div className="rounded-lg bg-muted/40 p-2 text-[11px] font-mono text-muted-foreground line-clamp-2">

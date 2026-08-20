@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { CornerDownLeftIcon } from 'lucide-react'
 import type { Message } from '../lib/types'
 
 interface ConversationTimelineProps {
@@ -81,10 +82,13 @@ export function ConversationTimeline({
                 </div>
                 <div className="mt-1.5 flex items-center justify-between font-mono text-[9px] text-muted-foreground">
                   <span>Input #{item.displayNumber} of {totalCount}</span>
-                  <span className="text-primary/90 font-medium">Jump ↵</span>
+                  <span className="inline-flex items-center gap-0.5 text-primary/90 font-medium">
+                    Jump <CornerDownLeftIcon className="size-2.5" />
+                  </span>
                 </div>
               </div>
             )}
+
 
             {/* Clickable Dash Button */}
             <button

@@ -13,9 +13,9 @@ import {
   PinOffIcon,
   PlusIcon,
   SearchIcon,
-  SparklesIcon,
   Trash2Icon,
   XIcon,
+  ZapIcon,
 } from 'lucide-react'
 import { useChatStore } from '../store/chat'
 import { useSettingsStore } from '../store/settings'
@@ -54,12 +54,14 @@ function getAgentIcon(icon: string) {
       return <SearchIcon className="size-4 text-primary shrink-0" />
     case 'brain':
       return <BrainIcon className="size-4 text-primary shrink-0" />
+    case 'zap':
     case 'sparkles':
-      return <SparklesIcon className="size-4 text-primary shrink-0" />
+      return <ZapIcon className="size-4 text-primary shrink-0" />
     default:
       return <BotIcon className="size-4 text-primary shrink-0" />
   }
 }
+
 
 interface ConversationRowProps {
   conv: Conversation
@@ -310,6 +312,42 @@ export function Sidebar({ collapsed, onExpand, onOpenSettings }: SidebarProps) {
     [conversations, currentAgentId, search],
   )
 
+  const groupedConversations = useMemo(() => {
+    const groups = [
+      { label: 'Pinned', items: [] as Conversation[] },
+      { label: 'Today', items: [] as Conversation[] },
+      { label: 'Yesterday', items: [] as Conversation[] },
+      { label: 'Previous 7 Days', items: [] as Conversation[] },
+      { label: 'Previous 30 Days', items: [] as Conversation[] },
+      { label: 'Older', items: [] as Conversation[] },
+    ]
+
+    const now = new Date()
+    now.setHours(0, 0, 0, 0)
+    const startOfToday = Math.floor(now.getTime() / 1000)
+    const startOfYesterday = startOfToday - 86400
+    const startOf7DaysAgo = startOfToday - 7 * 86400
+    const startOf30DaysAgo = startOfToday - 30 * 86400
+
+    for (const conv of filtered) {
+      if (conv.pinned) {
+        groups[0].items.push(conv)
+      } else if (conv.updated_at >= startOfToday) {
+        groups[1].items.push(conv)
+      } else if (conv.updated_at >= startOfYesterday) {
+        groups[2].items.push(conv)
+      } else if (conv.updated_at >= startOf7DaysAgo) {
+        groups[3].items.push(conv)
+      } else if (conv.updated_at >= startOf30DaysAgo) {
+        groups[4].items.push(conv)
+      } else {
+        groups[5].items.push(conv)
+      }
+    }
+
+    return groups.filter((g) => g.items.length > 0)
+  }, [filtered])
+
   const toggleSelectConversation = (id: number) => {
     setSelectedIds((prev) => {
       const next = new Set(prev)
@@ -513,20 +551,35 @@ export function Sidebar({ collapsed, onExpand, onOpenSettings }: SidebarProps) {
         </div>
 
         {/* Conversations / Topics under this Assistant */}
-        <div aria-label="Conversations" className="flex-1 overflow-y-auto px-2 py-2 space-y-0.5">
-          {filtered.map((conv) => (
-            <ConversationRow
-              key={conv.id}
-              conv={conv}
-              active={conv.id === activeConversationId}
-              isSelectMode={isSelectMode}
-              isSelected={selectedIds.has(conv.id)}
-              onToggleSelect={() => toggleSelectConversation(conv.id)}
-              onSelect={() => selectConversation(conv.id)}
-              onRename={() => openRename(conv.id, conv.title)}
-              onTogglePin={() => pinConversation(conv.id, !conv.pinned)}
-              onDelete={() => deleteConversation(conv.id)}
-            />
+        <div aria-label="Conversations" className="flex-1 overflow-y-auto px-2 py-2">
+          {groupedConversations.map((group) => (
+            <div key={group.label} className="pb-2 last:pb-0">
+              <div className="sticky top-0 z-20 bg-sidebar px-3 pt-3 pb-1 text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
+                {group.label === 'Pinned' ? (
+                  <span className="flex items-center gap-1.5">
+                    <PinIcon className="size-3" /> Pinned
+                  </span>
+                ) : (
+                  group.label
+                )}
+              </div>
+              <ul className="space-y-0.5">
+                {group.items.map((conv) => (
+                  <ConversationRow
+                    key={conv.id}
+                    conv={conv}
+                    active={conv.id === activeConversationId}
+                    isSelectMode={isSelectMode}
+                    isSelected={selectedIds.has(conv.id)}
+                    onToggleSelect={() => toggleSelectConversation(conv.id)}
+                    onSelect={() => selectConversation(conv.id)}
+                    onRename={() => openRename(conv.id, conv.title)}
+                    onTogglePin={() => pinConversation(conv.id, !conv.pinned)}
+                    onDelete={() => deleteConversation(conv.id)}
+                  />
+                ))}
+              </ul>
+            </div>
           ))}
 
           {filtered.length === 0 && (

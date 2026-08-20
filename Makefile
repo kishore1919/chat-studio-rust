@@ -5,7 +5,7 @@
 help:
 	@echo "Chat Studio - available targets:"
 	@echo "  make install     Install Rust deps (via cargo) and JS deps (via bun)"
-	@echo "  make dev         Run the app in dev mode (tauri dev --no-watch)"
+	@echo "  make dev         Run the app in dev mode (tauri dev with watcher)"
 	@echo "  make dev-stable  Vite + the debug binary launched directly (bypasses"
 	@echo "                   a tauri-cli watcher bug seen on Windows - see AGENTS.md)"
 	@echo "                   Dev-only: not CI-safe (backgrounds a process with &)."
@@ -23,12 +23,10 @@ install:
 	cd ui && bun install
 	bun install
 
-# `tauri dev` on its own has an intermittent watcher bug on Windows that
-# kills the app moments after launch (exit code 255) even with nothing
-# edited. --no-watch avoids it; see AGENTS.md for the full story and the
-# dev-stable fallback if this still misbehaves.
+# `tauri dev` with file watcher enabled. If you hit the intermittent
+# watcher bug on Windows (exit code 255), use `make dev-stable` instead.
 dev:
-	bun run tauri dev -- --no-watch
+	bun run tauri dev
 
 # Fallback when `make dev` still isn't stable: run Vite standalone and
 # launch the debug binary directly, skipping the tauri-cli dev wrapper

@@ -194,6 +194,13 @@ export interface Diagnostics {
   startup_warnings: string[]
 }
 
+export interface ThemeMeta {
+  id: string
+  name: string
+  type: string
+  builtin: boolean
+}
+
 /** Snapshot of the most recent request assembled by `prepare_chat` - lets
  * Settings show what was actually sent instead of guessing. Null until the
  * first message of the session. */

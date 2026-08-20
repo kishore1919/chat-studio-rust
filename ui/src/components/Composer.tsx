@@ -1,6 +1,14 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
-import { ArrowUpIcon, ChevronDownIcon, ClockIcon, MessageSquarePlusIcon, SquareIcon, TriangleAlertIcon } from 'lucide-react'
-import { useChatStore } from '../store/chat'
+import {
+  ArrowUpIcon,
+  ChevronDownIcon,
+  ClockIcon,
+  MessageSquarePlusIcon,
+  SlidersHorizontalIcon,
+  SquareIcon,
+  TriangleAlertIcon,
+} from 'lucide-react'
+import { useChatStore, useConversationMessages } from '../store/chat'
 import { useSettingsStore } from '../store/settings'
 import { ipc } from '../lib/ipc'
 import type { ContextUsage, PromptTemplate, Skill } from '../lib/types'
@@ -13,6 +21,11 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
 import { cn, useDebouncedCallback } from '@/lib/utils'
 
 const MIN_TEXTAREA_HEIGHT_PX = 24
@@ -31,6 +44,138 @@ interface CommandOption {
   action: (composer: { text: string; setText: (v: string) => void }) => void
 }
 
+function formatTokens(tokens: number): string {
+  if (tokens >= 1_000_000) {
+    const val = tokens / 1_000_000
+    return `${val % 1 === 0 ? val : val.toFixed(1)}M`
+  }
+  if (tokens >= 1_000) {
+    const val = tokens / 1_000
+    return `${val % 1 === 0 ? val : val.toFixed(1)}K`
+  }
+  return tokens.toLocaleString()
+}
+
+interface ContextPopoverProps {
+  usage: ContextUsage
+  onCompact: () => void
+}
+
+function ContextPopover({ usage, onCompact }: ContextPopoverProps) {
+  const ratio = usage.budget_tokens > 0 ? usage.used_tokens / usage.budget_tokens : 0
+  const pct = Math.min(100, Math.max(0, ratio * 100))
+  const pctFormatted = (pct >= 10 ? pct.toFixed(1) : pct >= 0.1 ? pct.toFixed(1) : pct.toFixed(0)).replace(/\.0$/, '')
+  const radius = 7
+  const circumference = 2 * Math.PI * radius
+  const strokeDashoffset = circumference - (pct / 100) * circumference
+
+  const handleOpenSettings = () => {
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: ',', ctrlKey: true }))
+  }
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          aria-label={`Context window: ${pctFormatted}% used`}
+          title={`Context window: ${pctFormatted}% used (${usage.used_tokens.toLocaleString()} / ${usage.budget_tokens.toLocaleString()} tokens)`}
+          className={cn(
+            'flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full transition-colors',
+            'text-muted-foreground hover:bg-muted hover:text-foreground',
+          )}
+        >
+          <svg className="size-4 -rotate-90" viewBox="0 0 20 20">
+            <circle
+              cx="10"
+              cy="10"
+              r={radius}
+              stroke="currentColor"
+              strokeWidth="2.5"
+              className="text-muted/40"
+              fill="none"
+            />
+            <circle
+              cx="10"
+              cy="10"
+              r={radius}
+              stroke="currentColor"
+              strokeWidth="2.5"
+              className={cn(
+                'transition-all duration-300',
+                pct >= 90 ? 'text-destructive' : pct >= 75 ? 'text-amber-500' : 'text-foreground',
+              )}
+              fill="none"
+              strokeDasharray={circumference}
+              strokeDashoffset={strokeDashoffset}
+              strokeLinecap="round"
+            />
+          </svg>
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="end" side="top" sideOffset={10} className="w-64 p-4 shadow-xl">
+        <div className="flex flex-col gap-3">
+          <div className="text-sm font-semibold text-foreground tracking-tight">Context window</div>
+
+          {/* Progress bar */}
+          <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted/80">
+            <div
+              className={cn(
+                'h-full rounded-full transition-all duration-300',
+                pct >= 90 ? 'bg-destructive' : pct >= 75 ? 'bg-amber-500' : 'bg-foreground',
+              )}
+              style={{ width: `${Math.max(pct > 0 ? 2 : 0, pct)}%` }}
+            />
+          </div>
+
+          {/* Stats row */}
+          <div className="flex items-center justify-between text-xs font-normal text-foreground">
+            <span>
+              {formatTokens(usage.used_tokens)} / {formatTokens(usage.budget_tokens)} tokens used
+            </span>
+            <span className="tabular-nums font-medium">{pctFormatted}%</span>
+          </div>
+
+          {usage.dropped_count > 0 && (
+            <p className="flex items-start gap-1 text-[11px] text-amber-500">
+              <TriangleAlertIcon className="mt-0.5 size-3 shrink-0" />
+              <span>
+                {usage.dropped_count} earlier message{usage.dropped_count === 1 ? '' : 's'} won't be sent
+                {usage.system_tokens > 0
+                  ? ` (system prompt: ${formatTokens(usage.system_tokens)})`
+                  : ''}
+              </span>
+            </p>
+          )}
+
+          {/* Action row */}
+          <div className="flex items-center gap-1.5 pt-1">
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={onCompact}
+              className="flex-1 h-8 rounded-full bg-muted/60 hover:bg-muted text-xs font-medium text-foreground transition-colors"
+            >
+              Compact
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              onClick={handleOpenSettings}
+              className="size-8 shrink-0 rounded-full text-muted-foreground hover:text-foreground"
+              title="Context settings"
+            >
+              <SlidersHorizontalIcon className="size-3.5" />
+            </Button>
+          </div>
+        </div>
+      </PopoverContent>
+    </Popover>
+  )
+}
+
 export function Composer() {
   const [text, setText] = useState('')
   const [menuIndex, setMenuIndex] = useState(0)
@@ -43,6 +188,12 @@ export function Composer() {
   const createConversation = useChatStore((s) => s.createConversation)
   const isStreaming = useChatStore((s) => s.streaming !== null)
   const activeConversationId = useChatStore((s) => s.activeConversationId)
+  const conversationMessages = useConversationMessages(activeConversationId)
+  const userMessages = conversationMessages.filter((m) => m.role === 'user')
+  // null = not currently browsing history; otherwise an index into
+  // `userMessages`, most-recent-first (0 is the last message sent).
+  const historyIndexRef = useRef<number | null>(null)
+  const historyDraftRef = useRef('')
   const settings = useSettingsStore((s) => s.settings)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const [contextUsage, setContextUsage] = useState<ContextUsage | null>(null)
@@ -68,6 +219,14 @@ export function Composer() {
     const providerId = settings.default_provider ?? settings.providers[0]?.id
     if (!providerId) return
     createConversation(providerId, settings.default_model ?? '')
+  }
+
+  const handleCompact = () => {
+    if (isStreaming) return
+    sendMessage(
+      'Please summarize our conversation so far concisely, preserving all key context, decisions, and facts to compact the history.',
+      null,
+    )
   }
 
   const isCommandTriggered = text.startsWith('/')
@@ -210,6 +369,7 @@ export function Composer() {
     const trimmed = text.trim()
     if (!trimmed || isStreaming) return
     setText('')
+    historyIndexRef.current = null
     const effort = thinkingMode === 'on' ? 'high' : thinkingMode === 'off' ? 'low' : null
     sendMessage(trimmed, effort)
   }
@@ -247,6 +407,24 @@ export function Composer() {
     } else if (e.key === 'Escape' && isStreaming) {
       e.preventDefault()
       cancelStream()
+    } else if (e.key === 'ArrowUp' && (text === '' || historyIndexRef.current !== null)) {
+      if (userMessages.length === 0) return
+      const nextIndex = historyIndexRef.current === null ? 0 : historyIndexRef.current + 1
+      if (nextIndex >= userMessages.length) return
+      e.preventDefault()
+      if (historyIndexRef.current === null) historyDraftRef.current = text
+      historyIndexRef.current = nextIndex
+      setText(userMessages[userMessages.length - 1 - nextIndex].content)
+    } else if (e.key === 'ArrowDown' && historyIndexRef.current !== null) {
+      e.preventDefault()
+      const prevIndex = historyIndexRef.current - 1
+      if (prevIndex < 0) {
+        historyIndexRef.current = null
+        setText(historyDraftRef.current)
+      } else {
+        historyIndexRef.current = prevIndex
+        setText(userMessages[userMessages.length - 1 - prevIndex].content)
+      }
     }
   }
 
@@ -329,7 +507,10 @@ export function Composer() {
             ref={textareaRef}
             id="composer-textarea"
             value={text}
-            onChange={(e) => setText(e.target.value)}
+            onChange={(e) => {
+              historyIndexRef.current = null
+              setText(e.target.value)
+            }}
             onKeyDown={handleKeyDown}
             placeholder="Type a message. Press Enter to send, Shift+Enter for a new line. Type / for commands."
             rows={1}
@@ -340,17 +521,23 @@ export function Composer() {
           />
 
           <div className="flex items-center justify-between">
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              onClick={handleNewChat}
-              aria-label="New chat"
-              title="New chat"
-              className="size-8 shrink-0 rounded-full text-muted-foreground hover:text-foreground"
-            >
-              <MessageSquarePlusIcon className="size-4" />
-            </Button>
+            <div className="flex items-center gap-1">
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                onClick={handleNewChat}
+                aria-label="New chat"
+                title="New chat"
+                className="size-8 shrink-0 rounded-full text-muted-foreground hover:text-foreground"
+              >
+                <MessageSquarePlusIcon className="size-4" />
+              </Button>
+
+              {contextUsage && contextUsage.budget_tokens > 0 && (
+                <ContextPopover usage={contextUsage} onCompact={handleCompact} />
+              )}
+            </div>
 
             <div className="flex items-center gap-2">
               <DropdownMenu>
@@ -421,49 +608,9 @@ export function Composer() {
               )}
             </div>
           </div>
-
-          {contextUsage && contextUsage.budget_tokens > 0 ? (
-            <ContextMeter usage={contextUsage} />
-          ) : null}
         </div>
       </div>
     </div>
   )
 }
 
-/** Live estimate of how full the conversation's context window is, including
- * the current draft. Not an exact token count - see `context.rs`. */
-function ContextMeter({ usage }: { usage: ContextUsage }) {
-  const ratio = Math.min(1, usage.used_tokens / usage.budget_tokens)
-  const pct = Math.round(ratio * 100)
-  return (
-    <div className="space-y-1 px-0.5">
-      <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
-        <div className="h-1 flex-1 overflow-hidden rounded-full bg-muted">
-          <div
-            className={cn(
-              'h-full rounded-full transition-[width]',
-              ratio >= 1 ? 'bg-destructive' : ratio >= 0.8 ? 'bg-amber-500' : 'bg-primary/60',
-            )}
-            style={{ width: `${Math.max(2, pct)}%` }}
-          />
-        </div>
-        <span className="tabular-nums">
-          {usage.used_tokens.toLocaleString()} / {usage.budget_tokens.toLocaleString()} tokens
-        </span>
-      </div>
-      {usage.dropped_count > 0 ? (
-        <p className="flex items-start gap-1 text-[10px] text-amber-500">
-          <TriangleAlertIcon className="mt-px size-3 shrink-0" />
-          <span>
-            {usage.dropped_count} earlier message{usage.dropped_count === 1 ? '' : 's'} won't be
-            sent
-            {usage.system_tokens > 0
-              ? ` - the system prompt uses ${usage.system_tokens.toLocaleString()} tokens of the budget`
-              : ''}
-          </span>
-        </p>
-      ) : null}
-    </div>
-  )
-}

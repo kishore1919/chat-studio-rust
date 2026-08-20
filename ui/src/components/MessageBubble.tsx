@@ -24,6 +24,7 @@ import { Textarea } from '@/components/ui/textarea'
 
 interface MessageBubbleProps {
   message: Message
+  isLastUserMessage?: boolean
 }
 
 function formatDuration(ms: number | null) {
@@ -39,7 +40,7 @@ function formatTokensPerSecond(tokensOut: number | null, durationMs: number | nu
   return (tokensOut / seconds).toFixed(1)
 }
 
-function MessageBubbleImpl({ message }: MessageBubbleProps) {
+function MessageBubbleImpl({ message, isLastUserMessage = false }: MessageBubbleProps) {
   const [expanded, setExpanded] = useState(false)
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(message.content)
@@ -76,7 +77,7 @@ function MessageBubbleImpl({ message }: MessageBubbleProps) {
     return { toolCalls: [], cleanedText: message.content }
   }, [cleanedAfterThinking, message.content, message.role])
 
-  const handleCopy = () => copy(message.content)
+  const handleCopy = () => copy(message.role === 'assistant' ? cleanedText : message.content)
 
   const pinned = message.context_flag === 'pinned'
   const excluded = message.context_flag === 'excluded'
@@ -138,7 +139,7 @@ function MessageBubbleImpl({ message }: MessageBubbleProps) {
       >
         <EyeOffIcon className="size-3" />
       </Button>
-      {message.role === 'user' && (
+      {message.role === 'user' && isLastUserMessage && (
         <Button
           variant="ghost"
           size="icon-sm"
@@ -151,17 +152,19 @@ function MessageBubbleImpl({ message }: MessageBubbleProps) {
           <RotateCcwIcon className="size-3" />
         </Button>
       )}
-      <Button
-        variant="ghost"
-        size="icon-sm"
-        className="size-6 text-muted-foreground hover:text-foreground"
-        aria-label="Edit and resend"
-        title={pendingHint ?? 'Edit & Resend'}
-        disabled={mutationsDisabled}
-        onClick={startEdit}
-      >
-        <PencilIcon className="size-3" />
-      </Button>
+      {(message.role !== 'user' || isLastUserMessage) && (
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          className="size-6 text-muted-foreground hover:text-foreground"
+          aria-label="Edit and resend"
+          title={pendingHint ?? 'Edit & Resend'}
+          disabled={mutationsDisabled}
+          onClick={startEdit}
+        >
+          <PencilIcon className="size-3" />
+        </Button>
+      )}
       <Button
         variant="ghost"
         size="icon-sm"

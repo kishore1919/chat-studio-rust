@@ -1,3 +1,4 @@
+import { ChevronRightIcon } from 'lucide-react'
 import { useChatStore } from '../store/chat'
 
 const STARTER_PROMPTS = [
@@ -48,9 +49,7 @@ export function EmptyChatState() {
           >
             <div className="flex w-full items-center justify-between gap-2">
               <span className="truncate text-xs font-medium text-foreground">{item.title}</span>
-              <span className="shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-60">
-                ›
-              </span>
+              <ChevronRightIcon className="size-3.5 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-60" />
             </div>
             <div className="w-full break-words text-[11px] leading-relaxed whitespace-normal text-muted-foreground">
               {item.prompt}
@@ -61,3 +60,4 @@ export function EmptyChatState() {
     </div>
   )
 }
+
