@@ -64,6 +64,67 @@ Project-specific tools, paths, and conventions.
 - **Target the right branch**: `main` is the default branch for all active development — submit features, refactors, optimizations, and fixes here.
 
 
+## Code Commit Rules
+
+All commits must follow these rules — no exceptions.
+
+### Conventional Commits
+
+Format: `<type>(<scope>): <subject>`
+
+- **type**: `feat` | `fix` | `refactor` | `docs` | `chore` | `test` | `perf` | `build` | `ci` | `style`
+- **scope**: specific kebab-case module (e.g., `data-api`, `lifecycle`, `quick-assistant`, `window-manager`). Never generic like `main`, `core`, `app`.
+- **subject**: imperative mood, lowercase, no trailing period, max 72 chars.
+- **body** (optional): explains *why* and *what changed*, not *how*. Wrap at 72 chars.
+- **footer** (optional): `BREAKING CHANGE:`, `Fixes #123`, `Co-authored-by:`.
+- **No Co-authored-by: trailers for AI agents** — only human contributors.
+
+Examples:
+```
+feat(data-api): add conversation pinning endpoint
+fix(lifecycle): prevent double-close on window blur
+refactor(quick-assistant): extract model selector into hook
+docs(testing): add SSE parser test fixtures
+chore(deps): update tauri to 2.0.3
+test(window-manager): add focus retention test
+```
+
+### Signing & DCO
+
+Every commit must be:
+1. **Cryptographically signed** (GPG/SSH): `git commit -S`
+2. **DCO signed-off**: `git commit --signoff` (adds `Signed-off-by:` trailer)
+
+Use both together: `git commit -S --signoff -m "..."`
+
+Verify before push:
+```bash
+git cat-file commit HEAD | grep -E '^(gpgsig|Signed-off-by)'
+```
+
+GitHub must show **Verified** badge on the commit.
+
+### Branch Target
+
+- **`main`** is the only target branch for features, fixes, refactors, and optimizations.
+- No `develop`, `staging`, or release branches — everything lands on `main`.
+- Hotfixes for released versions: branch from the tag, fix, tag new patch, merge back to `main`.
+
+### Commit Granularity
+
+- One logical change per commit. If `git diff` shows unrelated files, split.
+- No "WIP", "fixup", "cleanup" commits in history — rewrite locally before pushing.
+- Each commit must pass `cargo test` / `bun run lint` / `bun x tsc -b` individually.
+
+### PR Requirements
+
+- PR title = commit subject (or squash-merge subject).
+- PR description: what, why, test plan, screenshots for UI changes.
+- No draft PRs without CI passing.
+- Review required: at least one approval before merge.
+- Squash-merge only — no merge commits in `main` history.
+- **No `Co-authored-by:` trailers for AI agents** — only human contributors.
+
 ## What this is
 
 Chat Studio - a Tauri v2 desktop chat client for Ollama Cloud, NVIDIA NIM, and OpenRouter
