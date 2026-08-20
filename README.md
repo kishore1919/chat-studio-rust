@@ -3,7 +3,7 @@
 A lightweight Tauri v2 desktop chat client for **Ollama**, **OpenRouter**, **NVIDIA NIM**, **OpenAI**, **Anthropic**, **Google Gemini**, and any OpenAI-compatible endpoint. Built with Rust backend, React 19 + TypeScript frontend, styled with Tailwind v4 + shadcn/ui (Radix primitives).
 
 <p align="center">
-  <img alt="Chat Studio screenshot" src="docs/screenshot.png" width="800">
+  <img alt="Chat Studio screenshot" src="images/screenshot.png" width="800">
 </p>
 
 ---
