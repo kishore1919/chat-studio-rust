@@ -1,18 +1,17 @@
 import { useState } from 'react'
-import { PencilIcon, PlusIcon, Trash2Icon } from 'lucide-react'
+import { PlusIcon } from 'lucide-react'
 import { useSettingsStore } from '../store/settings'
 import type { PromptTemplate } from '../lib/types'
+import { newId } from '../lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
+import { Textarea } from '@/components/ui/textarea'
+import { PaneHeader } from './settings/PaneHeader'
+import { SettingsCard } from './settings/SettingsCard'
+import { CardActions } from './settings/CardActions'
+import { PromptPreview } from './settings/PromptPreview'
+import { PaneDialog } from './settings/PaneDialog'
 
 export function PromptsPane() {
   const settings = useSettingsStore((s) => s.settings)
@@ -57,7 +56,7 @@ export function PromptsPane() {
       })
     } else {
       const newPrompt: PromptTemplate = {
-        id: `prompt-${Date.now()}`,
+        id: newId('prompt'),
         name: name.trim(),
         content: content.trim(),
       }
@@ -69,19 +68,20 @@ export function PromptsPane() {
 
   return (
     <div className="max-w-3xl space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-base font-semibold text-foreground">Prompts</h2>
-          <p className="text-xs text-muted-foreground">
+      <PaneHeader
+        title="Prompts"
+        description={
+          <>
             Saved message snippets, applied via <span className="font-mono">/prompt &lt;name&gt;</span> in
             the composer. Unlike a skill or agent, a prompt is inserted as your draft message text to
             review and send - it doesn't change the conversation's system prompt.
-          </p>
-        </div>
+          </>
+        }
+      >
         <Button size="sm" onClick={openAdd} className="gap-1.5 text-xs">
           <PlusIcon className="size-3.5" /> New Prompt
         </Button>
-      </div>
+      </PaneHeader>
 
       <div className="grid grid-cols-1 gap-3">
         {prompts.length === 0 && (
@@ -90,80 +90,55 @@ export function PromptsPane() {
           </p>
         )}
         {prompts.map((prompt) => (
-          <div
-            key={prompt.id}
-            className="flex flex-col gap-2 rounded-xl border border-border bg-card p-4 text-xs transition-colors"
-          >
+          <SettingsCard key={prompt.id}>
             <div className="flex items-start justify-between">
               <span className="font-semibold text-foreground">{prompt.name}</span>
               <div className="flex items-center gap-2">
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  onClick={() => openEdit(prompt)}
-                  className="size-7 text-muted-foreground hover:text-foreground"
-                  title="Edit prompt"
-                >
-                  <PencilIcon className="size-3.5" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  onClick={() => handleDelete(prompt.id)}
-                  className="size-7 text-muted-foreground hover:text-destructive"
-                  title="Delete prompt"
-                >
-                  <Trash2Icon className="size-3.5" />
-                </Button>
+                <CardActions
+                  onEdit={() => openEdit(prompt)}
+                  onDelete={() => handleDelete(prompt.id)}
+                  editTitle="Edit prompt"
+                  deleteTitle="Delete prompt"
+                />
               </div>
             </div>
-            <div className="rounded-lg bg-muted/40 p-2 text-[11px] font-mono text-muted-foreground line-clamp-3">
-              {prompt.content}
-            </div>
-          </div>
+            <PromptPreview lines={3}>{prompt.content}</PromptPreview>
+          </SettingsCard>
         ))}
       </div>
 
-      <Dialog open={modalOpen} onOpenChange={setModalOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>{editingPrompt ? 'Edit Prompt' : 'New Prompt'}</DialogTitle>
-            <DialogDescription>Give it a short name to reference with /prompt &lt;name&gt;.</DialogDescription>
-          </DialogHeader>
+      <PaneDialog
+        open={modalOpen}
+        onOpenChange={setModalOpen}
+        title={editingPrompt ? 'Edit Prompt' : 'New Prompt'}
+        description={
+          <>Give it a short name to reference with /prompt &lt;name&gt;.</>
+        }
+        onSave={handleSave}
+        saveLabel={editingPrompt ? 'Save Prompt' : 'Create Prompt'}
+        saveDisabled={!name.trim() || !content.trim()}
+      >
+        <div className="space-y-1">
+          <Label className="text-xs">Name</Label>
+          <Input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="e.g. bug-report"
+            className="h-8 text-xs"
+          />
+        </div>
 
-          <div className="space-y-3 pt-1">
-            <div className="space-y-1">
-              <Label className="text-xs">Name</Label>
-              <Input
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="e.g. bug-report"
-                className="h-8 text-xs"
-              />
-            </div>
-
-            <div className="space-y-1">
-              <Label className="text-xs">Message text</Label>
-              <textarea
-                value={content}
-                onChange={(e) => setContent(e.target.value)}
-                placeholder="Describe the bug: what you expected, what happened, and steps to reproduce."
-                rows={5}
-                className="w-full rounded-md border border-input bg-transparent px-3 py-1.5 text-xs shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-              />
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setModalOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleSave} disabled={!name.trim() || !content.trim()}>
-              {editingPrompt ? 'Save Prompt' : 'Create Prompt'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        <div className="space-y-1">
+          <Label className="text-xs">Message text</Label>
+          <Textarea
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            placeholder="Describe the bug: what you expected, what happened, and steps to reproduce."
+            rows={5}
+            className="min-h-0 px-3 py-1.5 text-xs shadow-xs"
+          />
+        </div>
+      </PaneDialog>
     </div>
   )
 }

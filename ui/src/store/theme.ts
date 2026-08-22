@@ -1,7 +1,8 @@
 import { create } from 'zustand'
 import { ipc } from '../lib/ipc'
+import type { ThemePreference } from '../lib/types'
 
-export type ThemeId = 'light' | 'dark' | 'system'
+export type ThemeId = ThemePreference
 
 const STORAGE_KEY = 'chat-studio-theme-id'
 const LEGACY_KEY = 'chat-studio-theme'

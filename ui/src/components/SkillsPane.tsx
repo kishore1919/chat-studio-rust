@@ -7,45 +7,38 @@ import {
   GlobeIcon,
   LanguagesIcon,
   Loader2Icon,
-  PencilIcon,
   PlusIcon,
-  Trash2Icon,
   WrenchIcon,
   ZapIcon,
+  type LucideIcon,
 } from 'lucide-react'
 import { useSettingsStore } from '../store/settings'
 import { ipc } from '../lib/ipc'
 import type { Skill } from '../lib/types'
+import { newId } from '../lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
+import { Textarea } from '@/components/ui/textarea'
+import { PaneHeader } from './settings/PaneHeader'
+import { SettingsCard } from './settings/SettingsCard'
+import { CardActions } from './settings/CardActions'
+import { PromptPreview } from './settings/PromptPreview'
+import { PaneDialog } from './settings/PaneDialog'
+
+const SKILL_ICONS: Record<string, LucideIcon> = {
+  code: CodeIcon,
+  'file-text': FileTextIcon,
+  brain: BrainIcon,
+  languages: LanguagesIcon,
+  globe: GlobeIcon,
+  zap: ZapIcon,
+}
 
 function getSkillIcon(icon: string) {
-  switch (icon) {
-    case 'code':
-      return <CodeIcon className="size-4 text-primary" />
-    case 'file-text':
-      return <FileTextIcon className="size-4 text-primary" />
-    case 'brain':
-      return <BrainIcon className="size-4 text-primary" />
-    case 'languages':
-      return <LanguagesIcon className="size-4 text-primary" />
-    case 'globe':
-      return <GlobeIcon className="size-4 text-primary" />
-    case 'zap':
-      return <ZapIcon className="size-4 text-primary" />
-    default:
-      return <WrenchIcon className="size-4 text-primary" />
-  }
+  const Icon = SKILL_ICONS[icon] ?? WrenchIcon
+  return <Icon className="size-4 text-primary" />
 }
 
 
@@ -149,7 +142,7 @@ export function SkillsPane() {
       save({ ...settings, skills: updated })
     } else {
       const newSkill: Skill = {
-        id: `skill-${Date.now()}`,
+        id: newId('skill'),
         name: name.trim(),
         slash_command: cleanSlash,
         description: description.trim(),
@@ -175,29 +168,24 @@ export function SkillsPane() {
 
   return (
     <div className="max-w-3xl space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-base font-semibold text-foreground">Skills</h2>
-          <p className="text-xs text-muted-foreground">
-            Modular abilities and toolsets from built-ins, global directories (~/.agents, ~/.claude, ~/.gemini), and custom skills.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={scanning}
-            onClick={handleScanGlobal}
-            className="gap-1.5 text-xs"
-          >
-            {scanning ? <Loader2Icon className="size-3.5 animate-spin" /> : <FolderSyncIcon className="size-3.5" />}
-            Scan Global Skills
-          </Button>
-          <Button size="sm" onClick={openAdd} className="gap-1.5 text-xs">
-            <PlusIcon className="size-3.5" /> Add Skill
-          </Button>
-        </div>
-      </div>
+      <PaneHeader
+        title="Skills"
+        description="Modular abilities and toolsets from built-ins, global directories (~/.agents, ~/.claude, ~/.gemini), and custom skills."
+      >
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={scanning}
+          onClick={handleScanGlobal}
+          className="gap-1.5 text-xs"
+        >
+          {scanning ? <Loader2Icon className="size-3.5 animate-spin" /> : <FolderSyncIcon className="size-3.5" />}
+          Scan Global Skills
+        </Button>
+        <Button size="sm" onClick={openAdd} className="gap-1.5 text-xs">
+          <PlusIcon className="size-3.5" /> Add Skill
+        </Button>
+      </PaneHeader>
 
       {/* Filter Tabs */}
       <div className="flex items-center gap-1.5 border-b border-border pb-2">
@@ -242,10 +230,7 @@ export function SkillsPane() {
           </div>
         ) : (
           filteredSkills.map((skill) => (
-            <div
-              key={skill.id}
-              className="flex flex-col gap-2 rounded-xl border border-border bg-card p-4 text-xs transition-colors"
-            >
+            <SettingsCard key={skill.id}>
               <div className="flex items-start justify-between">
                 <div className="flex items-start gap-2.5">
                   <div className="flex size-7 items-center justify-center rounded-lg bg-primary/10">
@@ -279,102 +264,74 @@ export function SkillsPane() {
                     checked={skill.enabled}
                     onCheckedChange={(checked) => handleToggle(skill.id, checked)}
                   />
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    onClick={() => openEdit(skill)}
-                    className="size-7 text-muted-foreground hover:text-foreground"
-                    title="Edit skill"
-                  >
-                    <PencilIcon className="size-3.5" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    onClick={() => handleDelete(skill.id)}
-                    className="size-7 text-muted-foreground hover:text-destructive"
-                    title="Delete skill"
-                  >
-                    <Trash2Icon className="size-3.5" />
-                  </Button>
+                  <CardActions
+                    onEdit={() => openEdit(skill)}
+                    onDelete={() => handleDelete(skill.id)}
+                    editTitle="Edit skill"
+                    deleteTitle="Delete skill"
+                  />
                 </div>
               </div>
 
-              {/* Prompt preview */}
-              <div className="rounded-lg bg-muted/40 p-2 text-[11px] font-mono text-muted-foreground line-clamp-2">
-                {skill.system_prompt}
-              </div>
-            </div>
+              <PromptPreview>{skill.system_prompt}</PromptPreview>
+            </SettingsCard>
           ))
         )}
       </div>
 
-      {/* Add / Edit Skill Dialog */}
-      <Dialog open={modalOpen} onOpenChange={setModalOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>{editingSkill ? 'Edit Skill' : 'Create Custom Skill'}</DialogTitle>
-            <DialogDescription>
-              Define a reusable prompt persona or specialized workflow.
-            </DialogDescription>
-          </DialogHeader>
+      <PaneDialog
+        open={modalOpen}
+        onOpenChange={setModalOpen}
+        title={editingSkill ? 'Edit Skill' : 'Create Custom Skill'}
+        description="Define a reusable prompt persona or specialized workflow."
+        onSave={handleSaveSkill}
+        saveLabel={editingSkill ? 'Save Changes' : 'Create Skill'}
+        saveDisabled={!name.trim() || !systemPrompt.trim()}
+      >
+        <div className="space-y-1">
+          <Label className="text-xs">Skill Name</Label>
+          <Input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="e.g. Security Auditor"
+            className="h-8 text-xs"
+          />
+        </div>
 
-          <div className="space-y-3 pt-1">
-            <div className="space-y-1">
-              <Label className="text-xs">Skill Name</Label>
-              <Input
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="e.g. Security Auditor"
-                className="h-8 text-xs"
-              />
-            </div>
-
-            <div className="space-y-1">
-              <Label className="text-xs">Slash Command Trigger</Label>
-              <div className="flex items-center gap-1">
-                <span className="text-xs font-mono text-muted-foreground">/</span>
-                <Input
-                  value={slashCommand}
-                  onChange={(e) => setSlashCommand(e.target.value)}
-                  placeholder="audit"
-                  className="h-8 text-xs font-mono"
-                />
-              </div>
-            </div>
-
-            <div className="space-y-1">
-              <Label className="text-xs">Description</Label>
-              <Input
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="Audit code for security holes, injection risks, and OWASP top 10."
-                className="h-8 text-xs"
-              />
-            </div>
-
-            <div className="space-y-1">
-              <Label className="text-xs">System Instructions & Prompt</Label>
-              <textarea
-                value={systemPrompt}
-                onChange={(e) => setSystemPrompt(e.target.value)}
-                placeholder="You are a principal cybersecurity auditor. Analyze the following code..."
-                rows={4}
-                className="w-full rounded-md border border-input bg-transparent px-3 py-1.5 text-xs shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-              />
-            </div>
+        <div className="space-y-1">
+          <Label className="text-xs">Slash Command Trigger</Label>
+          <div className="flex items-center gap-1">
+            <span className="text-xs font-mono text-muted-foreground">/</span>
+            <Input
+              value={slashCommand}
+              onChange={(e) => setSlashCommand(e.target.value)}
+              placeholder="audit"
+              className="h-8 text-xs font-mono"
+            />
           </div>
+        </div>
 
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setModalOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleSaveSkill} disabled={!name.trim() || !systemPrompt.trim()}>
-              {editingSkill ? 'Save Changes' : 'Create Skill'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        <div className="space-y-1">
+          <Label className="text-xs">Description</Label>
+          <Input
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="Audit code for security holes, injection risks, and OWASP top 10."
+            className="h-8 text-xs"
+          />
+        </div>
+
+        <div className="space-y-1">
+          <Label className="text-xs">System Instructions & Prompt</Label>
+          <Textarea
+            value={systemPrompt}
+            onChange={(e) => setSystemPrompt(e.target.value)}
+            placeholder="You are a principal cybersecurity auditor. Analyze the following code..."
+            rows={4}
+            className="min-h-0 px-3 py-1.5 text-xs shadow-xs"
+          />
+        </div>
+      </PaneDialog>
     </div>
   )
 }

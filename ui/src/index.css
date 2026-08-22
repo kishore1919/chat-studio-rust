@@ -11,10 +11,6 @@
   overflow-x: hidden;
 }
 
-/* highlight.js theme CSS text is injected into #hljs-theme by lib/theme.ts,
-   swapped alongside data-theme rather than picked by a media query, since
-   the user can override the OS preference from Settings. */
-
 /* Design tokens, modeled on Cherry Studio's palette: neutral grays for all
    chrome (background/border/text), a single green brand accent that stays
    the same hex in both modes, and borders (not fill color) doing most of the

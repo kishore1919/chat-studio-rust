@@ -11,6 +11,7 @@ interface Props {
 
 interface State {
   hasError: boolean
+  copied: boolean
 }
 
 /** Catches render-time crashes from a single message (a malformed table, a
@@ -19,7 +20,8 @@ interface State {
  * in the app, so this is the only safety net between "one bad message" and
  * "the app is gone until relaunch". */
 export class MessageErrorBoundary extends Component<Props, State> {
-  state: State = { hasError: false }
+  state: State = { hasError: false, copied: false }
+  private copiedTimer: ReturnType<typeof setTimeout> | undefined
 
   static getDerivedStateFromError() {
     return { hasError: true }
@@ -27,6 +29,17 @@ export class MessageErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: unknown, info: unknown) {
     console.error('message render failed', error, info)
+  }
+
+  componentWillUnmount() {
+    clearTimeout(this.copiedTimer)
+  }
+
+  private handleCopy = () => {
+    void navigator.clipboard.writeText(this.props.fallbackText)
+    this.setState({ copied: true })
+    clearTimeout(this.copiedTimer)
+    this.copiedTimer = setTimeout(() => this.setState({ copied: false }), 1500)
   }
 
   render() {
@@ -38,11 +51,11 @@ export class MessageErrorBoundary extends Component<Props, State> {
           <span className="text-[11px] font-medium text-destructive">This message failed to render</span>
           <button
             type="button"
-            onClick={() => void navigator.clipboard.writeText(this.props.fallbackText)}
+            onClick={this.handleCopy}
             className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground"
           >
             <CopyIcon className="size-3" />
-            Copy raw text
+            {this.state.copied ? 'Copied' : 'Copy raw text'}
           </button>
         </div>
         <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words text-[12px] text-foreground/80">

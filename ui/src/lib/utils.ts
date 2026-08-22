@@ -6,6 +6,12 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
+/** `` `${prefix}-${Date.now()}` `` collides when multiple items are created in
+ * the same millisecond (e.g. programmatic imports); `crypto.randomUUID` does not. */
+export function newId(prefix: string): string {
+  return `${prefix}-${crypto.randomUUID()}`
+}
+
 /** Shared across every per-message timestamp render - constructing a fresh
  * `Intl.DateTimeFormat` per row is measurable once a conversation grows past
  * ~100 messages. */

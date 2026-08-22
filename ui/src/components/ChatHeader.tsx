@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import {
+  CheckIcon,
   DownloadIcon,
   EraserIcon,
   GitBranchIcon,
@@ -12,6 +13,7 @@ import { cn } from '../lib/utils'
 import { FEATURES } from '../lib/features'
 import { formatConversationMarkdown } from '../lib/exportMarkdown'
 import { ProviderIcon } from '../lib/providerIcon'
+import { useCopyFeedback } from '../lib/useCopyFeedback'
 import { Button } from '@/components/ui/button'
 import {
   Select,
@@ -71,10 +73,10 @@ export function ChatHeader({
     setConversationModel(active.id, providerId, modelId)
   }
 
+  const [exportCopied, copyExport] = useCopyFeedback()
   const handleExport = () => {
     if (!active || messages.length === 0) return
-    const md = formatConversationMarkdown(active.title, messages)
-    navigator.clipboard.writeText(md)
+    copyExport(formatConversationMarkdown(active.title, messages))
   }
 
   return (
@@ -190,7 +192,7 @@ export function ChatHeader({
             className="size-8 text-muted-foreground hover:text-foreground"
             title="Copy as Markdown"
           >
-            <DownloadIcon className="size-4" />
+            {exportCopied ? <CheckIcon className="size-4 text-success" /> : <DownloadIcon className="size-4" />}
           </Button>
         )}
         {active && (

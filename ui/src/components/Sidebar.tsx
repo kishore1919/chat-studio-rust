@@ -7,19 +7,19 @@ import {
   ChevronRightIcon,
   CodeIcon,
   MessageSquarePlusIcon,
-  MoreHorizontalIcon,
-  PencilIcon,
   PinIcon,
-  PinOffIcon,
   PlusIcon,
   SearchIcon,
   Trash2Icon,
   XIcon,
   ZapIcon,
+  type LucideIcon,
 } from 'lucide-react'
 import { useChatStore } from '../store/chat'
 import { useSettingsStore } from '../store/settings'
 import type { AgentConfig, Conversation } from '../lib/types'
+import { newId } from '../lib/utils'
+import { ConversationRow } from './ConversationRow'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -37,6 +37,7 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
 import { cn } from '@/lib/utils'
 
 interface SidebarProps {
@@ -46,131 +47,17 @@ interface SidebarProps {
   onOpenSettings?: () => void
 }
 
+const AGENT_ICONS: Record<string, LucideIcon> = {
+  code: CodeIcon,
+  search: SearchIcon,
+  brain: BrainIcon,
+  zap: ZapIcon,
+  sparkles: ZapIcon,
+}
+
 function getAgentIcon(icon: string) {
-  switch (icon) {
-    case 'code':
-      return <CodeIcon className="size-4 text-primary shrink-0" />
-    case 'search':
-      return <SearchIcon className="size-4 text-primary shrink-0" />
-    case 'brain':
-      return <BrainIcon className="size-4 text-primary shrink-0" />
-    case 'zap':
-    case 'sparkles':
-      return <ZapIcon className="size-4 text-primary shrink-0" />
-    default:
-      return <BotIcon className="size-4 text-primary shrink-0" />
-  }
-}
-
-
-interface ConversationRowProps {
-  conv: Conversation
-  active: boolean
-  isSelectMode: boolean
-  isSelected: boolean
-  onToggleSelect: () => void
-  onSelect: () => void
-  onRename: () => void
-  onTogglePin: () => void
-  onDelete: () => void
-}
-
-function ConversationRow({
-  conv,
-  active,
-  isSelectMode,
-  isSelected,
-  onToggleSelect,
-  onSelect,
-  onRename,
-  onTogglePin,
-  onDelete,
-}: ConversationRowProps) {
-  return (
-    <li className="group relative list-none">
-      <button
-        type="button"
-        onClick={isSelectMode ? onToggleSelect : onSelect}
-        aria-label={`Open ${conv.title}`}
-        aria-current={active ? 'true' : undefined}
-        className="absolute inset-0 z-0 rounded-lg"
-      />
-      <div
-        className={cn(
-          'pointer-events-none relative z-10 flex items-center justify-between rounded-lg border px-3 py-2 text-[13px] transition-all',
-          isSelected
-            ? 'border-primary/30 bg-primary/10 font-medium text-foreground'
-            : active
-              ? 'border-border/40 bg-accent font-medium text-foreground shadow-xs'
-              : 'border-transparent text-muted-foreground hover:text-foreground group-hover:border-border/30 group-hover:bg-accent/40',
-        )}
-      >
-        <div className="flex min-w-0 flex-1 items-center gap-2">
-          {isSelectMode && (
-            <input
-              type="checkbox"
-              checked={isSelected}
-              onChange={onToggleSelect}
-              className="pointer-events-auto size-3.5 rounded border-border accent-primary cursor-pointer shrink-0"
-            />
-          )}
-          <div className="min-w-0 flex-1">
-            <div className="truncate text-foreground leading-snug font-medium text-[13px]">{conv.title}</div>
-          </div>
-        </div>
-
-        {!isSelectMode && (
-          <div className="pointer-events-auto flex shrink-0 items-center gap-1 pl-1">
-            {conv.pinned && (
-              <PinIcon className="size-3 text-primary opacity-80 group-hover:hidden" />
-            )}
-            <div className="hidden items-center gap-0.5 group-hover:flex">
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                onClick={onDelete}
-                className="size-6 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                title="Delete conversation"
-              >
-                <Trash2Icon className="size-3.5" />
-              </Button>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    className="size-6 text-muted-foreground hover:text-foreground"
-                    title="More actions"
-                  >
-                    <MoreHorizontalIcon className="size-3.5" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={onTogglePin}>
-                    {conv.pinned ? (
-                      <>
-                        <PinOffIcon className="size-3.5 mr-1.5" /> Unpin
-                      </>
-                    ) : (
-                      <>
-                        <PinIcon className="size-3.5 mr-1.5" /> Pin
-                      </>
-                    )}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={onRename}>
-                    <PencilIcon className="size-3.5 mr-1.5" /> Rename
-                  </DropdownMenuItem>
-                  <DropdownMenuItem variant="destructive" onClick={onDelete}>
-                    <Trash2Icon className="size-3.5 mr-1.5" /> Delete
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-          </div>
-        )}
-      </div>
-    </li>
-  )
+  const Icon = AGENT_ICONS[icon] ?? BotIcon
+  return <Icon className="size-4 text-primary shrink-0" />
 }
 
 export function Sidebar({ collapsed, onExpand, onOpenSettings }: SidebarProps) {
@@ -279,7 +166,7 @@ export function Sidebar({ collapsed, onExpand, onOpenSettings }: SidebarProps) {
   const handleCreateAssistant = async () => {
     if (!settings || !newAssistantName.trim()) return
     const newAgent: AgentConfig = {
-      id: `assistant-${Date.now()}`,
+      id: newId('assistant'),
       name: newAssistantName.trim(),
       role: newAssistantRole.trim() || 'AI Assistant',
       description: newAssistantRole.trim() || 'Custom Assistant',
@@ -630,13 +517,13 @@ export function Sidebar({ collapsed, onExpand, onOpenSettings }: SidebarProps) {
               </div>
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="assistant-prompt" className="text-xs">System Instructions</Label>
-                <textarea
+                <Textarea
                   id="assistant-prompt"
                   rows={3}
                   placeholder="You are a helpful assistant specialized in..."
                   value={newAssistantPrompt}
                   onChange={(e) => setNewAssistantPrompt(e.target.value)}
-                  className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-xs shadow-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  className="min-h-0 text-xs"
                 />
               </div>
             </div>

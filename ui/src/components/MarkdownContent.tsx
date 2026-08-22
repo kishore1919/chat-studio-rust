@@ -1,8 +1,7 @@
-import { lazy, memo, Suspense } from 'react'
+import { lazy, memo, Suspense, useEffect, useState } from 'react'
 import ReactMarkdown, { type Components } from 'react-markdown'
 import type { PluggableList } from 'unified'
 import remarkGfm from 'remark-gfm'
-import rehypeHighlight from 'rehype-highlight'
 import { CodeBlock } from './CodeBlock'
 
 // mermaid drags in d3, rough.js and cytoscape - together the bulk of the eager
@@ -25,14 +24,32 @@ interface MarkdownContentProps {
 // these props. Rebuilding them per render defeated that on every message,
 // settled or streaming.
 const REMARK_PLUGINS: PluggableList = [remarkGfm]
+const REHYPE_NONE: PluggableList = []
+
 // Measured: highlight.js + lowlight's `common` set is ~175KB of the eager
 // bundle. Trimming it is not worth attempting - `rehype-highlight` statically
 // imports `common` from lowlight, so the plugin's `languages` option only
 // changes which grammars get *registered*, not which get bundled (passing an
 // explicit set made the bundle 55KB *larger*). lowlight publishes no subpath
 // exports either, so there is no clean way to substitute a smaller default.
-const REHYPE_PLUGINS: PluggableList = [rehypeHighlight]
-const REHYPE_NONE: PluggableList = []
+// Deferring the whole plugin off the eager chat path is the win instead - it
+// is loaded once into this module-scoped cache (a stable reference, since
+// react-markdown memoizes on `rehypePlugins` identity) and every mount after
+// the first renders highlighted immediately with no re-flash.
+let rehypePlugins: PluggableList | null = null
+let rehypeLoading: Promise<PluggableList> | null = null
+const rehypeSubscribers = new Set<() => void>()
+
+function loadRehypeHighlight(): Promise<PluggableList> {
+  if (!rehypeLoading) {
+    rehypeLoading = import('rehype-highlight').then((m) => {
+      rehypePlugins = [m.default]
+      for (const notify of rehypeSubscribers) notify()
+      return rehypePlugins
+    })
+  }
+  return rehypeLoading
+}
 
 const COMPONENTS: Components = {
   code(props) {
@@ -145,11 +162,23 @@ const COMPONENTS: Components = {
 }
 
 function MarkdownContentImpl({ content, highlight = true }: MarkdownContentProps) {
+  const [loadedPlugins, setLoadedPlugins] = useState(rehypePlugins)
+
+  useEffect(() => {
+    if (!highlight || loadedPlugins) return
+    const notify = () => setLoadedPlugins(rehypePlugins)
+    rehypeSubscribers.add(notify)
+    loadRehypeHighlight().then(notify)
+    return () => {
+      rehypeSubscribers.delete(notify)
+    }
+  }, [highlight, loadedPlugins])
+
   return (
     <div className="prose-chat min-w-0 text-[length:var(--chat-font-size)] leading-relaxed break-words [overflow-wrap:anywhere]">
       <ReactMarkdown
         remarkPlugins={REMARK_PLUGINS}
-        rehypePlugins={highlight ? REHYPE_PLUGINS : REHYPE_NONE}
+        rehypePlugins={highlight && loadedPlugins ? loadedPlugins : REHYPE_NONE}
         components={COMPONENTS}
       >
         {content}

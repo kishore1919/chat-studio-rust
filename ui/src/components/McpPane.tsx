@@ -4,30 +4,26 @@ import {
   CheckIcon,
   GlobeIcon,
   Loader2Icon,
-  PencilIcon,
   PlusIcon,
   RefreshCwIcon,
   ServerIcon,
   TerminalIcon,
-  Trash2Icon,
   WrenchIcon,
   XCircleIcon,
 } from 'lucide-react'
 import { useSettingsStore } from '../store/settings'
 import { ipc } from '../lib/ipc'
 import type { McpServerConfig, McpTool } from '../lib/types'
+import { newId } from '../lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
+import { Textarea } from '@/components/ui/textarea'
+import { PaneHeader } from './settings/PaneHeader'
+import { SettingsCard } from './settings/SettingsCard'
+import { CardActions } from './settings/CardActions'
+import { PaneDialog } from './settings/PaneDialog'
 
 type McpPreset = {
   name: string
@@ -202,7 +198,7 @@ export function McpPane() {
   const buildServerConfig = (): McpServerConfig | null => {
     if (!name.trim()) return null
     const base: McpServerConfig = {
-      id: editingServer?.id ?? `mcp-${Date.now()}`,
+      id: editingServer?.id ?? newId('mcp'),
       name: name.trim(),
       enabled: true,
       transport,
@@ -239,17 +235,14 @@ export function McpPane() {
 
   return (
     <div className="max-w-3xl space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-base font-semibold text-foreground">Model Context Protocol (MCP)</h2>
-          <p className="text-xs text-muted-foreground">
-            Connect local stdio servers or remote streamable HTTP MCP endpoints for tool calling.
-          </p>
-        </div>
+      <PaneHeader
+        title="Model Context Protocol (MCP)"
+        description="Connect local stdio servers or remote streamable HTTP MCP endpoints for tool calling."
+      >
         <Button size="sm" onClick={openAdd} className="gap-1.5 text-xs">
           <PlusIcon className="size-3.5" /> Add MCP Server
         </Button>
-      </div>
+      </PaneHeader>
 
       {/* Server List */}
       <div className="space-y-3">
@@ -273,10 +266,7 @@ export function McpPane() {
                 ? server.url
                 : `${server.command} ${server.args.join(' ')}`
             return (
-              <div
-                key={server.id}
-                className="flex flex-col gap-2 rounded-xl border border-border bg-card p-4 text-xs transition-colors"
-              >
+              <SettingsCard key={server.id}>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2.5">
                     <div className="flex size-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
@@ -320,25 +310,12 @@ export function McpPane() {
                       onCheckedChange={(checked) => handleToggle(server.id, checked)}
                     />
 
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      onClick={() => openEdit(server)}
-                      className="size-7 text-muted-foreground hover:text-foreground"
-                      title="Edit server configuration"
-                    >
-                      <PencilIcon className="size-3.5" />
-                    </Button>
-
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      onClick={() => handleDelete(server.id)}
-                      className="size-7 text-muted-foreground hover:text-destructive"
-                      title="Remove server"
-                    >
-                      <Trash2Icon className="size-3.5" />
-                    </Button>
+                    <CardActions
+                      onEdit={() => openEdit(server)}
+                      onDelete={() => handleDelete(server.id)}
+                      editTitle="Edit server configuration"
+                      deleteTitle="Remove server"
+                    />
                   </div>
                 </div>
 
@@ -382,23 +359,22 @@ export function McpPane() {
                     )}
                   </div>
                 )}
-              </div>
+              </SettingsCard>
             )
           })
         )}
       </div>
 
-      {/* Add / Edit Server Dialog */}
-      <Dialog open={modalOpen} onOpenChange={setModalOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>{editingServer ? 'Edit MCP Server' : 'Add MCP Server'}</DialogTitle>
-            <DialogDescription>
-              Configure an MCP server via stdio command or streamable HTTP endpoint.
-            </DialogDescription>
-          </DialogHeader>
-
-          {!editingServer && (
+      <PaneDialog
+        open={modalOpen}
+        onOpenChange={setModalOpen}
+        title={editingServer ? 'Edit MCP Server' : 'Add MCP Server'}
+        description="Configure an MCP server via stdio command or streamable HTTP endpoint."
+        onSave={handleSaveServer}
+        saveLabel={editingServer ? 'Save Changes' : 'Add Server'}
+        saveDisabled={!isFormValid}
+        beforeFields={
+          !editingServer && (
             <div className="space-y-1.5">
               <Label className="text-xs text-muted-foreground">Quick Presets</Label>
               <div className="flex flex-wrap gap-1.5">
@@ -432,20 +408,20 @@ export function McpPane() {
                 ))}
               </div>
             </div>
-          )}
+          )
+        }
+      >
+        <div className="space-y-1">
+          <Label className="text-xs">Server Name</Label>
+          <Input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="e.g. Filesystem Connector"
+            className="h-8 text-xs"
+          />
+        </div>
 
-          <div className="space-y-3 pt-1">
-            <div className="space-y-1">
-              <Label className="text-xs">Server Name</Label>
-              <Input
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="e.g. Filesystem Connector"
-                className="h-8 text-xs"
-              />
-            </div>
-
-            <div className="space-y-1">
+        <div className="space-y-1">
               <Label className="text-xs">Transport</Label>
               <div className="flex gap-2">
                 <Button
@@ -505,39 +481,28 @@ export function McpPane() {
 
                 <div className="space-y-1">
                   <Label className="text-xs">Custom Headers (KEY=VALUE per line)</Label>
-                  <textarea
+                  <Textarea
                     value={headersStr}
                     onChange={(e) => setHeadersStr(e.target.value)}
                     placeholder="Authorization=Bearer token&#10;X-Custom=foo"
                     rows={2}
-                    className="w-full rounded-md border border-input bg-transparent px-3 py-1.5 text-xs font-mono shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                    className="min-h-0 px-3 py-1.5 text-xs font-mono shadow-xs"
                   />
                 </div>
               </>
             )}
 
-            <div className="space-y-1">
-              <Label className="text-xs">Environment Variables (KEY=VALUE per line)</Label>
-              <textarea
-                value={envStr}
-                onChange={(e) => setEnvStr(e.target.value)}
-                placeholder="API_KEY=xyz&#10;DEBUG=1"
-                rows={2}
-                className="w-full rounded-md border border-input bg-transparent px-3 py-1.5 text-xs font-mono shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-              />
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setModalOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleSaveServer} disabled={!isFormValid}>
-              {editingServer ? 'Save Changes' : 'Add Server'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        <div className="space-y-1">
+          <Label className="text-xs">Environment Variables (KEY=VALUE per line)</Label>
+          <Textarea
+            value={envStr}
+            onChange={(e) => setEnvStr(e.target.value)}
+            placeholder="API_KEY=xyz&#10;DEBUG=1"
+            rows={2}
+            className="min-h-0 px-3 py-1.5 text-xs font-mono shadow-xs"
+          />
+        </div>
+      </PaneDialog>
     </div>
   )
 }

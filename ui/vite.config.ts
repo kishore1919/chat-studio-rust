@@ -33,5 +33,20 @@ export default defineConfig({
     target: 'es2022',
     minify: !process.env.TAURI_ENV_DEBUG ? 'esbuild' : false,
     sourcemap: !!process.env.TAURI_ENV_DEBUG,
+    rollupOptions: {
+      output: {
+        // Vite 8 runs on Rolldown, whose chunking knob is `advancedChunks`
+        // (not Rollup's `manualChunks`). Splitting these out gives stable
+        // vendor chunks so a source edit doesn't invalidate the whole
+        // eager bundle for HTTP caching.
+        advancedChunks: {
+          groups: [
+            { name: 'react', test: /node_modules\/(react|react-dom)\// },
+            { name: 'radix', test: /node_modules\/@radix-ui\// },
+            { name: 'markdown', test: /node_modules\/(react-markdown|remark-gfm|unified|micromark|mdast|hast|unist|vfile|bail|trough|property-information|space-separated-tokens|comma-separated-tokens|hast-util|mdast-util|remark|rehype)/ },
+          ],
+        },
+      },
+    },
   },
 })

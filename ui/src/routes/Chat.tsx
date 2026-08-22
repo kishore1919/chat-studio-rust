@@ -1,12 +1,19 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { Sidebar } from '../components/Sidebar'
 import { ChatHeader } from '../components/ChatHeader'
 import { MessageList } from '../components/MessageList'
 import { Composer } from '../components/Composer'
 import { EmptyChatState } from '../components/EmptyChatState'
-import { MindMapPanel } from '../components/MindMapPanel'
-import { ShortcutsDialog } from '../components/ShortcutsDialog'
 import { useChatStore } from '../store/chat'
+
+// Both are keyboard-gated (Ctrl+M / Ctrl+/) and not shown on first render -
+// deferring them keeps them off the eager chat bundle.
+const MindMapPanel = lazy(() =>
+  import('../components/MindMapPanel').then((m) => ({ default: m.MindMapPanel })),
+)
+const ShortcutsDialog = lazy(() =>
+  import('../components/ShortcutsDialog').then((m) => ({ default: m.ShortcutsDialog })),
+)
 
 interface ChatProps {
   onOpenSettings: () => void
@@ -24,6 +31,7 @@ export function Chat({ onOpenSettings }: ChatProps) {
   const [mindMapOpen, setMindMapOpen] = useState(false)
   const [targetMessageId, setTargetMessageId] = useState<number | null>(null)
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
+  const [shortcutsEverOpened, setShortcutsEverOpened] = useState(false)
   const activeConversationId = useChatStore((s) => s.activeConversationId)
 
   useEffect(() => {
@@ -53,6 +61,7 @@ export function Chat({ onOpenSettings }: ChatProps) {
       } else if ((e.ctrlKey || e.metaKey) && e.key === '/') {
         e.preventDefault()
         setShortcutsOpen((v) => !v)
+        setShortcutsEverOpened(true)
       }
     }
     window.addEventListener('keydown', handler)
@@ -92,14 +101,20 @@ export function Chat({ onOpenSettings }: ChatProps) {
             <Composer />
           </div>
           {mindMapOpen && activeConversationId !== null && (
-            <MindMapPanel
-              onClose={() => setMindMapOpen(false)}
-              onSelectMessage={handleSelectMessageFromMindMap}
-            />
+            <Suspense fallback={null}>
+              <MindMapPanel
+                onClose={() => setMindMapOpen(false)}
+                onSelectMessage={handleSelectMessageFromMindMap}
+              />
+            </Suspense>
           )}
         </div>
       </div>
-      <ShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
+      {shortcutsEverOpened && (
+        <Suspense fallback={null}>
+          <ShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
+        </Suspense>
+      )}
     </div>
   )
 }
