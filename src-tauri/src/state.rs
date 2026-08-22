@@ -64,24 +64,37 @@ impl AppState {
 /// taking the data back is strictly better than cascading.
 impl AppState {
     pub fn db(&self) -> MutexGuard<'_, Connection> {
-        self.db.lock().unwrap_or_else(|e| e.into_inner())
+        self.db.lock().unwrap_or_else(|e| {
+            tracing::warn!("db mutex poisoned, recovering");
+            e.into_inner()
+        })
     }
 
     pub fn settings(&self) -> MutexGuard<'_, Settings> {
-        self.settings.lock().unwrap_or_else(|e| e.into_inner())
+        self.settings.lock().unwrap_or_else(|e| {
+            tracing::warn!("settings mutex poisoned, recovering");
+            e.into_inner()
+        })
     }
 
     pub fn active_streams(&self) -> MutexGuard<'_, HashMap<String, CancellationToken>> {
-        self.active_streams
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
+        self.active_streams.lock().unwrap_or_else(|e| {
+            tracing::warn!("active_streams mutex poisoned, recovering");
+            e.into_inner()
+        })
     }
 
     pub fn model_cache(&self) -> MutexGuard<'_, HashMap<String, ModelCacheEntry>> {
-        self.model_cache.lock().unwrap_or_else(|e| e.into_inner())
+        self.model_cache.lock().unwrap_or_else(|e| {
+            tracing::warn!("model_cache mutex poisoned, recovering");
+            e.into_inner()
+        })
     }
 
     pub fn last_request(&self) -> MutexGuard<'_, Option<RequestSnapshot>> {
-        self.last_request.lock().unwrap_or_else(|e| e.into_inner())
+        self.last_request.lock().unwrap_or_else(|e| {
+            tracing::warn!("last_request mutex poisoned, recovering");
+            e.into_inner()
+        })
     }
 }

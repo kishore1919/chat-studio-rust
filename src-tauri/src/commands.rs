@@ -286,10 +286,15 @@ pub fn save_settings(state: State<AppState>, settings: Settings) -> Result<(), S
 
 #[tauri::command]
 pub fn add_provider(state: State<AppState>, provider: ProviderConfig) -> Result<(), String> {
-    let mut settings = state.settings();
-    settings.providers.retain(|p| p.id != provider.id);
-    settings.providers.push(provider);
-    config::save_settings(&settings).map_err(|e| e.to_string())
+    let provider_id = provider.id.clone();
+    {
+        let mut settings = state.settings();
+        settings.providers.retain(|p| p.id != provider_id);
+        settings.providers.push(provider);
+        config::save_settings(&settings).map_err(|e| e.to_string())?;
+    }
+    state.model_cache().remove(&provider_id);
+    Ok(())
 }
 
 #[tauri::command]
@@ -785,9 +790,11 @@ async fn start_stream(
 
         let channel = format!("stream://{stream_id_for_task}");
         let started = Instant::now();
+        const MAX_REPLY_CHARS: usize = 500_000;
         let mut full_text = String::new();
         let mut full_reasoning = String::new();
         let mut pending: Vec<Pending> = Vec::new();
+        let mut truncated = false;
         let mut interval =
             tokio::time::interval(std::time::Duration::from_millis(COALESCE_INTERVAL_MS));
 
@@ -796,10 +803,18 @@ async fn start_stream(
                 event = rx.recv() => {
                     match event {
                         Some(ProviderEvent::Delta { text }) => {
+                            if full_text.len() + text.len() > MAX_REPLY_CHARS {
+                                truncated = true;
+                                break;
+                            }
                             full_text.push_str(&text);
                             Pending::push(&mut pending, ProviderEvent::Delta { text });
                         }
                         Some(ProviderEvent::Reasoning { text }) => {
+                            if full_reasoning.len() + text.len() > MAX_REPLY_CHARS {
+                                truncated = true;
+                                break;
+                            }
                             full_reasoning.push_str(&text);
                             Pending::push(&mut pending, ProviderEvent::Reasoning { text });
                         }
@@ -814,11 +829,15 @@ async fn start_stream(
         flush_pending(&app_for_task, &channel, &mut pending);
 
         let duration_ms = started.elapsed().as_millis() as i64;
-        let outcome = match stream_task.await {
+        let outcome = if truncated {
+            Outcome::Errored("reply truncated: exceeded maximum length".into())
+        } else {
+            match stream_task.await {
             Ok(Ok(usage)) => Outcome::Finished(usage),
             Ok(Err(ProviderError::Cancelled)) => Outcome::Cancelled,
             Ok(Err(e)) => Outcome::Errored(e.to_string()),
             Err(join_err) => Outcome::Errored(join_err.to_string()),
+            }
         };
 
         // Partial or complete text is always persisted - including on

@@ -47,6 +47,30 @@ How to approach any coding task in this repo.
 2. [Step] → verify: [check]
 ```
 
+### Activity Logging Requirement
+At the end of every turn or tool execution, append an entry to `agent.log` recording your actions using this format:
+
+`[TIMESTAMP] [ACTION] [TARGET] - [DETAILS]`
+
+**Allowed Action Types:**
+* `READ`: Inspecting, querying, or viewing files/resources.
+* `WRITE`: Creating new files or generating new outputs.
+* `MODIFY`: Appending to or updating existing content without full replacement.
+* `REWRITE`: Completely overwriting an existing file or resource.
+* `DELETE`: Removing files, entries, or records.
+
+**Rules:**
+1. If multiple operations occur in a single turn, log each action on a new line.
+2. Use ISO 8601 timestamps (`YYYY-MM-DDTHH:MM:SSZ`) or Unix timestamps.
+3. If no file system or tool action occurred, log `[INFO] N/A - Responded to user prompt`.
+
+**Example `agent.log` entries:**
+[2026-08-22T14:30:00Z] [READ] config.json - Read database configurations
+[2026-08-22T14:30:05Z] [WRITE] src/utils.py - Created helper functions
+[2026-08-22T14:30:12Z] [MODIFY] .env - Added API key
+[2026-08-22T14:30:18Z] [DELETE] temp.txt - Removed temporary cache file
+[2026-08-22T14:30:25Z] [REWRITE] README.md - Replaced entire overview section
+
 ### Operational Rules
 
 Project-specific tools, paths, and conventions.

@@ -10,7 +10,7 @@ const CHARS_PER_TOKEN: usize = 3;
 pub const RESPONSE_RESERVE_TOKENS: u32 = 4096;
 
 pub fn estimate_tokens(s: &str) -> u32 {
-    s.len().div_ceil(CHARS_PER_TOKEN) as u32
+    s.chars().count().div_ceil(CHARS_PER_TOKEN) as u32
 }
 
 /// Result of assembling a request's message list under a token budget.
@@ -51,13 +51,13 @@ pub fn plan_context(
     let budget_tokens = context_tokens.saturating_sub(RESPONSE_RESERVE_TOKENS);
     let budget_chars = (budget_tokens as usize).saturating_mul(CHARS_PER_TOKEN);
 
-    let system_cost: usize = system_prompt.map(|s| s.len()).unwrap_or(0);
+    let system_cost: usize = system_prompt.map(|s| s.chars().count()).unwrap_or(0);
     let mut used = system_cost;
 
     let pinned_cost: usize = newest_first
         .iter()
         .filter(|r| r.pinned)
-        .map(|r| r.content.len())
+        .map(|r| r.content.chars().count())
         .sum();
     used = used.saturating_add(pinned_cost);
 
@@ -69,7 +69,7 @@ pub fn plan_context(
             kept.push(row);
             continue;
         }
-        let cost = row.content.len();
+        let cost = row.content.chars().count();
         // Always keep the most recent turn even if it alone exceeds budget -
         // a request with no question in it is worse than one that's over
         // budget.
@@ -92,7 +92,7 @@ pub fn plan_context(
     // The summary only replaces dropped turns - with nothing dropped the full
     // history goes anyway and the summary would just be redundant.
     let injected_summary = (dropped_count > 0).then_some(summary).flatten();
-    let system_chars = system_cost + injected_summary.map(str::len).unwrap_or(0);
+    let system_chars = system_cost + injected_summary.map(|s| s.chars().count()).unwrap_or(0);
 
     let mut messages: Vec<ChatMessage> = Vec::with_capacity(kept.len() + 2);
     if let Some(prompt) = system_prompt {
@@ -102,7 +102,7 @@ pub fn plan_context(
         });
     }
     if let Some(summary) = injected_summary {
-        used = used.saturating_add(summary.len());
+        used = used.saturating_add(summary.chars().count());
         messages.push(ChatMessage {
             role: "system".into(),
             content: summary.to_string(),

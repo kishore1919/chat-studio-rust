@@ -124,10 +124,10 @@ const MAX_ERROR_BODY: usize = 2048;
 pub async fn read_error_body(resp: reqwest::Response, api_key: &str) -> String {
     let body = resp.text().await.unwrap_or_default();
     let truncated: String = body.chars().take(MAX_ERROR_BODY).collect();
-    if api_key.len() >= 8 {
-        truncated.replace(api_key, "[redacted]")
-    } else {
+    if api_key.is_empty() {
         truncated
+    } else {
+        truncated.replace(api_key, "[redacted]")
     }
 }
 

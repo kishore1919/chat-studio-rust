@@ -109,9 +109,9 @@ make install
 # or manually:
 # cd ui && npm install && cd .. && npm install
 
-# Run dev (bypasses flaky tauri-cli watcher on Windows)
+# Run dev (with file watcher)
 make dev
-# or: npm run tauri dev -- --no-watch
+# or: npm run tauri dev
 ```
 
 ### Production Build
@@ -132,7 +132,7 @@ All commands available via `make` (run `make help`):
 | Target | Description |
 |--------|-------------|
 | `make install` | Install Rust deps (cargo) + JS deps (npm) + Tauri CLI |
-| `make dev` | Dev mode with `--no-watch` (avoids Windows watcher bug) |
+| `make dev` | Dev mode (`tauri dev` with file watcher) |
 | `make dev-stable` | Vite + debug binary directly (bypasses tauri-cli entirely) |
 | `make build` | Production build (frontend + release binary + installer) |
 | `make test` | Rust test suite (`cargo test`) |

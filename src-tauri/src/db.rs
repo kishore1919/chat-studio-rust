@@ -500,10 +500,11 @@ pub fn delete_message_and_after(
     // turns a retry into a full conversation wipe. `commands::valid_message_id`
     // rejects those at the IPC boundary; this catches any future caller that
     // bypasses it.
-    debug_assert!(
-        message_id > 0,
-        "delete_message_and_after: id must be positive"
-    );
+    if message_id <= 0 {
+        return Err(rusqlite::Error::InvalidParameterName(
+            "message_id must be positive".into(),
+        ));
+    }
     conn.execute(
         "DELETE FROM messages WHERE conversation_id = ?1 AND id >= ?2",
         params![conversation_id, message_id],
@@ -519,8 +520,11 @@ pub fn delete_messages_after(
     conversation_id: i64,
     message_id: i64,
 ) -> rusqlite::Result<()> {
-    // Same hazard as `delete_message_and_after`, one row narrower.
-    debug_assert!(message_id > 0, "delete_messages_after: id must be positive");
+    if message_id <= 0 {
+        return Err(rusqlite::Error::InvalidParameterName(
+            "delete_messages_after: id must be positive".into(),
+        ));
+    }
     conn.execute(
         "DELETE FROM messages WHERE conversation_id = ?1 AND id > ?2",
         params![conversation_id, message_id],
