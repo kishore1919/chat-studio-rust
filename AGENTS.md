@@ -107,14 +107,13 @@ GitHub must show **Verified** badge on the commit.
 ### Branch Target
 
 - **`main`** is the only target branch for features, fixes, refactors, and optimizations.
-- No `develop`, `staging`, or release branches — everything lands on `main`.
-- Hotfixes for released versions: branch from the tag, fix, tag new patch, merge back to `main`.
+- No `develop`, `staging`, or release branches — everything lands on `main`.\n- Hotfixes for released versions: branch from the tag, fix, tag new patch, merge back to `main`.
 
 ### Commit Granularity
 
 - One logical change per commit. If `git diff` shows unrelated files, split.
 - No "WIP", "fixup", "cleanup" commits in history — rewrite locally before pushing.
-- Each commit must pass `cargo test` / `bun run lint` / `bun x tsc -b` individually.
+- Each commit must pass `cargo test` / `npm run lint` / `npx tsc -b` individually.
 
 ### PR Requirements
 
@@ -136,26 +135,26 @@ visually on Cherry Studio.
 
 ```
 chat_studio/
-├─ Cargo.toml              # workspace root; release profile (opt-level="z", lto, strip)
-├─ package.json            # root: just the tauri CLI, so `bun run tauri ...` works from here
-├─ src-tauri/               # Rust backend
-│  ├─ tauri.conf.json       # beforeDevCommand/beforeBuildCommand point into ui/
-│  └─ src/
-│     ├─ main.rs            # Builder setup, invoke_handler registration
-│     ├─ commands.rs        # every #[tauri::command] - the whole IPC surface
-│     ├─ db.rs               # rusqlite schema + queries (schema version-gated migrations)
-│     ├─ config.rs          # settings.toml load/save, built-in provider presets
-│     ├─ state.rs           # AppState: db handle, settings, active streams, model cache
-│     └─ providers/
-│        ├─ mod.rs          # `Provider` trait, StreamEvent, shared LineSplitter
-│        ├─ openai_compat.rs # OpenRouter/NIM/custom - SSE parsing
-│        └─ ollama.rs        # Ollama's native NDJSON dialect (not OpenAI-compatible)
-└─ ui/                       # React frontend (Vite + Bun)
-   └─ src/
-      ├─ lib/{ipc,types,utils}.ts   # typed invoke() wrappers; types.ts mirrors Rust structs
-      ├─ store/{chat,settings,theme}.ts  # zustand stores
-      ├─ routes/{Chat,Settings}.tsx      # Settings is React.lazy-split in App.tsx
-      └─ components/                    # Sidebar, ChatHeader, Composer, MessageBubble, ui/*
+├── Cargo.toml              # workspace root; release profile (opt-level="z", lto, strip)
+├── package.json            # root: just the tauri CLI, so `npm run tauri ...` works from here
+├── src-tauri/               # Rust backend
+│  ├── tauri.conf.json       # beforeDevCommand/beforeBuildCommand point into ui/
+│  └── src/
+│     ├── main.rs            # Builder setup, invoke_handler registration
+│     ├── commands.rs        # every #[tauri::command] - the whole IPC surface
+│     ├── db.rs               # rusqlite schema + queries (schema version-gated migrations)
+│     ├── config.rs          # settings.toml load/save, built-in provider presets
+│     ├── state.rs           # AppState: db handle, settings, active streams, model cache
+│     └── providers/
+│        ├── mod.rs          # `Provider` trait, StreamEvent, shared LineSplitter
+│        ├── openai_compat.rs # OpenRouter/NIM/custom - SSE parsing
+│        └── ollama.rs        # Ollama's native NDJSON dialect (not OpenAI-compatible)
+└── ui/                       # React frontend (Vite + Node)
+   └── src/
+      ├── lib/{ipc,types,utils}.ts   # typed invoke() wrappers; types.ts mirrors Rust structs
+      ├── store/{chat,settings,theme}.ts  # zustand stores
+      ├── routes/{Chat,Settings}.tsx      # Settings is React.lazy-split in App.tsx
+      └── components/                    # Sidebar, ChatHeader, Composer, MessageBubble, ui/*
 ```
 
 ## Commands
@@ -163,15 +162,15 @@ chat_studio/
 Use the `Makefile` (`make help` lists everything), or run directly:
 
 ```
-cd ui && bun install && cd ..    # install JS deps
-bun install                       # installs the tauri CLI at the root
+cd ui && npm install && cd ..    # install JS deps
+npm install                       # installs the tauri CLI at the root
 
-bun run tauri dev -- --no-watch   # dev mode (see "tauri dev is flaky" below)
-bun run tauri build               # release build + installer
+npm run tauri dev -- --no-watch   # dev mode (see "tauri dev is flaky" below)
+npm run tauri build               # release build + installer
 
 cargo test --manifest-path src-tauri/Cargo.toml   # Rust test suite
-cd ui && bun x tsc -b && bun run lint              # frontend typecheck + lint
-cd ui && bun run build                             # frontend production build only
+cd ui && npx tsc -b && npm run lint               # frontend typecheck + lint
+cd ui && npm run build                            # frontend production build only
 ```
 
 There is no JS test suite yet - correctness on the frontend is enforced by `tsc` +
@@ -233,10 +232,9 @@ app's own tokens (`--accent`, `--bg-elevated`, ...) in the same file - note shad
   150-250MB before any app code runs. Don't chase a sub-100MB target by optimizing
   frontend code - it's not where the memory is. If a hard low-RAM number is ever a
   real requirement, that's a framework swap (Slint/egui/TUI), not a tuning pass.
-- **Bun, not Node/npm.** No `node_modules`-based tooling assumptions - `bun install`,
-  `bun run`, `bun x` throughout. The Tauri CLI is installed as `@tauri-apps/cli` via
-  bun (prebuilt binary), not `cargo install tauri-cli` (slow, and needs the same MSVC
-  toolchain caveat above).
+- **Node/npm tooling.** `npm install`, `npm run`, `npx` throughout. The Tauri CLI is
+  installed as `@tauri-apps/cli` via npm (prebuilt binary), not `cargo install tauri-cli`
+  (slow, and needs the same MSVC toolchain caveat above).
 
 ## Conventions
 

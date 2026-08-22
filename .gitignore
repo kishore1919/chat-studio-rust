@@ -7,7 +7,8 @@ Cargo.lock
 src-tauri/target/
 src-tauri/**/*.rs.bk
 
-# Frontend (Bun/Vite)
+# Frontend (Node/Vite)
+node_modules/
 ui/node_modules/
 ui/dist/
 ui/.vite/

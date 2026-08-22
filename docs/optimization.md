@@ -30,7 +30,7 @@ Verified zero import sites anywhere in `ui/src`, `ui/index.html`, `ui/vite.confi
 
 Also delete `ui/src/components/ui/badge.tsx` — orphan (the only "Badge" references outside it are a comment at `ChatHeader.tsx:95` and a locally-defined `ContextFlagBadge` at `MessageBubble.tsx:321`). **Keep** `class-variance-authority` and `@radix-ui/react-slot`: both are still live via `buttonVariants` and `asChild` in `ui/button.tsx`.
 
-→ verify: `cd ui && bun install && bun run build && bunx tsc -b` — clean, and `grep -r "tooltip\|separator\|badge" ui/src` returns no `@/components/ui/*` hits.
+→ verify: `cd ui && npm install && npm run build && npx tsc -b` — clean, and `grep -r "tooltip\|separator\|badge" ui/src` returns no `@/components/ui/*` hits.
 
 ## Phase 2 — Establish a vendor/app chunk boundary
 
@@ -46,7 +46,7 @@ Target groups:
 
 Leave `mermaid` alone; its dynamic-import split already works and produces ~3.3 MB of correctly-deferred chunks.
 
-→ verify: `bun run build`, then compare `dist/assets/index-*.js` byte size against the current 922,627 B baseline. Record before/after in the commit body.
+→ verify: `npm run build`, then compare `dist/assets/index-*.js` byte size against the current 922,627 B baseline. Record before/after in the commit body.
 
 ## Phase 3 — Defer the heavy eager trees
 
@@ -98,7 +98,7 @@ Also in this phase:
 
 Leave the per-pane CRUD handler bodies (`handleToggle`/`handleDelete`/`openAdd`/`openEdit`) as-is. They are structurally similar but each closes over a different settings key and item shape; a generic hook over them would be a single-use abstraction — exactly what `CLAUDE.md` forbids.
 
-→ verify: `bunx tsc -b` clean (`noUnusedLocals` will catch orphaned imports), then `make dev` and exercise add/edit/delete/toggle in each of the four panes.
+→ verify: `npx tsc -b` clean (`noUnusedLocals` will catch orphaned imports), then `make dev` and exercise add/edit/delete/toggle in each of the four panes.
 
 ## Phase 5 — Split the two largest files
 
@@ -113,7 +113,7 @@ Then **lazy-load all eight panes** behind the section switch. Today `Settings.ts
 
 `Sidebar.tsx` (697 lines) — split by extracting the conversation-item row and its rename/delete affordances into a sibling component. Keep this conservative: it is on the eager chat path and has no test coverage, so structural moves only, no logic rewrites.
 
-→ verify: `bunx tsc -b`, then click through every nav section in Settings and confirm each loads; exercise sidebar rename/delete/pin.
+→ verify: `npx tsc -b`, then click through every nav section in Settings and confirm each loads; exercise sidebar rename/delete/pin.
 
 ## Phase 6 — Small consolidations
 
@@ -132,10 +132,10 @@ Then **lazy-load all eight panes** behind the section switch. Today `Settings.ts
 
 ## Verification (end to end)
 
-1. `cd ui && bun install` — lockfile drops the 4 removed packages, nothing else moves.
+1. `cd ui && npm install` — lockfile drops the 4 removed packages, nothing else moves.
 2. `make check` — full pipeline: `cargo fmt --check`, `clippy -D warnings`, `tsc -b`, `oxlint`, `cargo test`. Must be clean. No Rust files are touched by this plan, so any Rust failure is pre-existing.
-3. `bun run build` — record `dist/assets/index-*.js` size against the **922,627 B** baseline; confirm distinct `react`/`radix`/`markdown` vendor chunks exist and that a highlight chunk is now separate.
+3. `npm run build` — record `dist/assets/index-*.js` size against the **922,627 B** baseline; confirm distinct `react`/`radix`/`markdown` vendor chunks exist and that a highlight chunk is now separate.
 4. `make dev` smoke test: send a message with a fenced code block and a ```mermaid fence; toggle Ctrl+M / Ctrl+/ / Ctrl+B; visit all eight Settings sections; add/edit/delete/toggle one item in each of Agents, Skills, Prompts, MCP; copy a message and copy the API-request debug info.
 5. Commit as separate conventional commits per phase (`chore(ui-deps):`, `perf(ui-bundle):`, `refactor(settings-panes):`, …) with `git commit -S --signoff`, so a regression can be bisected to one phase.
 
-**Note on measurement:** there is no bundle-analysis tooling installed and this task is about *reducing* package count, so I'll measure with raw `dist` byte sizes rather than adding `rollup-plugin-visualizer`. If you want a treemap, I can run a visualizer one-off via `bunx` without adding it to `package.json`.
+**Note on measurement:** there is no bundle-analysis tooling installed and this task is about *reducing* package count, so I'll measure with raw `dist` byte sizes rather than adding `rollup-plugin-visualizer`. If you want a treemap, I can run a visualizer one-off via `npx` without adding it to `package.json`.

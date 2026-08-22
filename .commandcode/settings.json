@@ -3,8 +3,9 @@
     "allow": [
       "Shell(git:*)",
       "Shell(cargo:*)",
-      "Shell(bun:*)",
-      "Shell(bun x tsc -b --verbose 2>&1 | head -n 20; echo \"---\"; ls ui/tsconfig*.json 2>&1; cat ui/tsconfig.json 2>&1 | head -n 30)",
+      "Shell(npm:*)",
+      "Shell(npx:*)",
+      "Shell(node:*)",
       "powershell"
     ],
     "deny": [],

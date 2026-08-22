@@ -45,27 +45,33 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v1
-      - run: cd ui && bun install --frozen-lockfile
-      - run: cd ui && bun x tsc -b
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: cd ui && npm ci
+      - run: cd ui && npx tsc -b
 
   lint:
     name: Lint (Frontend)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v1
-      - run: cd ui && bun install --frozen-lockfile
-      - run: cd ui && bun run lint
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: cd ui && npm ci
+      - run: cd ui && npm run lint
 
   build-frontend:
     name: Build Frontend
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v1
-      - run: cd ui && bun install --frozen-lockfile
-      - run: cd ui && bun run build
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: cd ui && npm ci
+      - run: cd ui && npm run build
 
   check:
     name: All Checks Passed

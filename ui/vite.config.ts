@@ -31,7 +31,7 @@ export default defineConfig({
     // evergreen enough for a modern baseline - no need to downlevel for
     // Safari 13, which was causing esbuild destructuring-transform failures.
     target: 'es2022',
-    minify: !process.env.TAURI_ENV_DEBUG ? 'esbuild' : false,
+    minify: !process.env.TAURI_ENV_DEBUG ? 'oxc' : false,
     sourcemap: !!process.env.TAURI_ENV_DEBUG,
     rollupOptions: {
       output: {

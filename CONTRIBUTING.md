@@ -76,7 +76,7 @@ git cat-file commit HEAD | grep -E "(gpgsig|Signed-off-by)"
 ### TypeScript (Frontend)
 - **Type-check**: `tsc -b` (run via `make typecheck`)
 - **Lint**: `oxlint` (run via `make lint`)
-- **Build**: `bun run build` (run via `make build-frontend`)
+- **Build**: `npm run build` (run via `make build-frontend`)
 - **State**: Use `zustand` stores in `ui/src/store/` — avoid inline selectors that return new object literals
 - **Components**: Use shadcn/ui primitives from `@radix-ui/*` + Tailwind v4
 

@@ -28,39 +28,39 @@ A lightweight Tauri v2 desktop chat client for **Ollama**, **OpenRouter**, **NVI
 
 ```
 chat_studio/
-├─ Cargo.toml              # Workspace root; release profile (opt-level="z", LTO, strip)
-├─ package.json            # Root: only the Tauri CLI (`bun run tauri ...`)
-├─ Makefile                # Unified dev/build/test/lint commands
-├─ src-tauri/              # Rust backend
-│  ├─ tauri.conf.json      # Tauri config (window, bundle, CSP, dev/build commands)
-│  └─ src/
-│     ├─ main.rs           # App builder, invoke_handler registration
-│     ├─ commands.rs       # All #[tauri::command] — the entire IPC surface
-│     ├─ db.rs             # rusqlite schema + queries (version-gated migrations)
-│     ├─ config.rs         # settings.toml load/save, built-in provider presets
-│     ├─ state.rs          # AppState: db handle, settings, active streams, model cache
-│     ├─ context.rs        # Conversation history preparation & token budgeting
-│     ├─ themes.rs         # Theme tokens & resolution
-│     ├─ providers/
-│     │  ├─ mod.rs         # Provider trait, StreamEvent, LineSplitter (shared parser)
-│     │  ├─ openai_compat.rs # OpenRouter / NIM / custom — SSE parsing
-│     │  ├─ ollama.rs      # Ollama native NDJSON (/api/chat dialect)
-│     │  ├─ anthropic.rs   # Anthropic Messages API
-│     │  ├─ gemini.rs      # Google Gemini API
-│     │  └─ openai.rs      # OpenAI Responses/Chat Completions API
-│     ├─ mcp/              # MCP client (stdio transport, tool calling)
-│     └─ skills/           # Skill execution & slash command routing
-└─ ui/                     # React frontend (Vite + Bun)
-   ├─ src/
-   │  ├─ lib/             # ipc.ts (typed invoke wrappers), types.ts (mirrors Rust), utils.ts
-   │  ├─ store/           # zustand stores: chat.ts, settings.ts, theme.ts
-   │  ├─ routes/          # Chat.tsx, Settings.tsx (lazy-loaded)
-   │  ├─ components/      # Sidebar, ChatHeader, Composer, MessageBubble, StreamingBubble, AgentsPane, McpPane, SkillsPane, PromptsPane, MindMapPanel, ToolCallCard, ThinkingBar, ui/*
-   │  ├─ App.tsx          # Root, theme script injection, route setup
-   │  ├─ index.css        # Tailwind v4 + CSS custom properties (theming)
-   │  └─ main.tsx         # Entry point
-   ├─ index.html          # Inline theme script (prevents flash)
-   └─ package.json
+├── Cargo.toml              # Workspace root; release profile (opt-level="z", LTO, strip)
+├── package.json            # Root: only the Tauri CLI (`npm run tauri ...`)
+├── Makefile                # Unified dev/build/test/lint commands
+├── src-tauri/              # Rust backend
+│  ├── tauri.conf.json      # Tauri config (window, bundle, CSP, dev/build commands)
+│  └── src/
+│     ├── main.rs           # App builder, invoke_handler registration
+│     ├── commands.rs       # All #[tauri::command] — the entire IPC surface
+│     ├── db.rs             # rusqlite schema + queries (version-gated migrations)
+│     ├── config.rs         # settings.toml load/save, built-in provider presets
+│     ├── state.rs          # AppState: db handle, settings, active streams, model cache
+│     ├── context.rs        # Conversation history preparation & token budgeting
+│     ├── themes.rs         # Theme tokens & resolution
+│     ├── providers/
+│     │  ├── mod.rs         # Provider trait, StreamEvent, LineSplitter (shared parser)
+│     │  ├── openai_compat.rs # OpenRouter / NIM / custom — SSE parsing
+│     │  ├── ollama.rs      # Ollama native NDJSON (/api/chat dialect)
+│     │  ├── anthropic.rs   # Anthropic Messages API
+│     │  ├── gemini.rs      # Google Gemini API
+│     │  └── openai.rs      # OpenAI Responses/Chat Completions API
+│     ├── mcp/              # MCP client (stdio transport, tool calling)
+│     └── skills/           # Skill execution & slash command routing
+└── ui/                     # React frontend (Vite + Node)
+   ├── src/
+   │  ├── lib/             # ipc.ts (typed invoke wrappers), types.ts (mirrors Rust), utils.ts
+   │  ├── store/           # zustand stores: chat.ts, settings.ts, theme.ts
+   │  ├── routes/          # Chat.tsx, Settings.tsx (lazy-loaded)
+   │  ├── components/      # Sidebar, ChatHeader, Composer, MessageBubble, StreamingBubble, AgentsPane, McpPane, SkillsPane, PromptsPane, MindMapPanel, ToolCallCard, ThinkingBar, ui/*
+   │  ├── App.tsx          # Root, theme script injection, route setup
+   │  ├── index.css        # Tailwind v4 + CSS custom properties (theming)
+   │  └── main.tsx         # Entry point
+   ├── index.html          # Inline theme script (prevents flash)
+   └── package.json
 ```
 
 ### Provider abstraction
@@ -94,7 +94,7 @@ Cancellation and mid-stream errors **still persist whatever text arrived** (see 
 | Tool | Version | Notes |
 |------|---------|-------|
 | **Rust** | stable (MSVC on Windows) | `rustup default stable-x86_64-pc-windows-msvc` on Windows |
-| **Bun** | ≥ 1.0 | `curl -fsSL https://bun.sh/install.sh \| bash` |
+| **Node.js** | ≥ 20.0 (with npm) | `https://nodejs.org` |
 | **Windows** | 10/11 | VS Build Tools "Desktop development with C++" workload required |
 
 ### Install & Run (Development)
@@ -107,18 +107,18 @@ cd chat_studio
 # Install all deps (Rust + JS + Tauri CLI)
 make install
 # or manually:
-# cd ui && bun install && cd .. && bun install
+# cd ui && npm install && cd .. && npm install
 
 # Run dev (bypasses flaky tauri-cli watcher on Windows)
 make dev
-# or: bun run tauri dev -- --no-watch
+# or: npm run tauri dev -- --no-watch
 ```
 
 ### Production Build
 
 ```bash
 make build
-# or: bun run tauri build
+# or: npm run tauri build
 ```
 
 Output: `src-tauri/target/release/bundle/` (NSIS/.msi on Windows, .dmg on macOS, AppImage/.deb/.rpm on Linux)
@@ -131,7 +131,7 @@ All commands available via `make` (run `make help`):
 
 | Target | Description |
 |--------|-------------|
-| `make install` | Install Rust deps (cargo) + JS deps (bun) + Tauri CLI |
+| `make install` | Install Rust deps (cargo) + JS deps (npm) + Tauri CLI |
 | `make dev` | Dev mode with `--no-watch` (avoids Windows watcher bug) |
 | `make dev-stable` | Vite + debug binary directly (bypasses tauri-cli entirely) |
 | `make build` | Production build (frontend + release binary + installer) |

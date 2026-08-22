@@ -30,7 +30,7 @@ Fixes #
 - [ ] Tested manually in dev mode (`make dev`)
 - [ ] Tested production build (`make build`)
 - [ ] Added/updated Rust tests in `src-tauri/src/`
-- [ ] Verified no frontend type errors (`cd ui && bun x tsc -b`)
+- [ ] Verified no frontend type errors (`cd ui && npx tsc -b`)
 
 ## Screenshots (if UI changes)
 <!-- Add screenshots or GIFs demonstrating the changes -->
