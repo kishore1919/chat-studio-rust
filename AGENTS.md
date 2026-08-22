@@ -42,34 +42,70 @@ How to approach any coding task in this repo.
   - "Refactor X" → "Ensure tests pass before and after."
 - For multi-step tasks, state a brief plan with explicit verification per step:
 
+
 ```
+
 1. [Step] → verify: [check]
 2. [Step] → verify: [check]
+
 ```
 
-### Activity Logging Requirement
-At the end of every turn or tool execution, append an entry to `agent.log` recording your actions using this format:
+### Response & Post-Fix Summary Protocol
 
-`[TIMESTAMP] [ACTION] [TARGET] - [DETAILS]`
+After completing any code edit or fix, your final response must end with a brief **Change Summary** formatted as follows:
 
-**Allowed Action Types:**
-* `READ`: Inspecting, querying, or viewing files/resources.
-* `WRITE`: Creating new files or generating new outputs.
-* `MODIFY`: Appending to or updating existing content without full replacement.
-* `REWRITE`: Completely overwriting an existing file or resource.
-* `DELETE`: Removing files, entries, or records.
+**What was done:**
+* **File:** `<path/to/file>`
+  * **Issue / Intent:** Why this change was needed.
+  * **Change:** Exactly what was modified, added, or removed (2-3 bullet points max).
+  * **Verification:** Which test or command confirmed the fix (`make check`, `cargo test`, etc.).
 
 **Rules:**
-1. If multiple operations occur in a single turn, log each action on a new line.
-2. Use ISO 8601 timestamps (`YYYY-MM-DDTHH:MM:SSZ`) or Unix timestamps.
-3. If no file system or tool action occurred, log `[INFO] N/A - Responded to user prompt`.
+- Keep explanations clear and concise; avoid generic phrasing like *"improved the code"*.
+- State exact function/type names and line-level intents so the impact is easy to track.
+- If multiple files were modified, list each file under its own bullet point.
 
-**Example `agent.log` entries:**
-[2026-08-22T14:30:00Z] [READ] config.json - Read database configurations
-[2026-08-22T14:30:05Z] [WRITE] src/utils.py - Created helper functions
-[2026-08-22T14:30:12Z] [MODIFY] .env - Added API key
-[2026-08-22T14:30:18Z] [DELETE] temp.txt - Removed temporary cache file
-[2026-08-22T14:30:25Z] [REWRITE] README.md - Replaced entire overview section
+### Activity Logging & Reversible Snapshot Protocol
+
+To maintain a full audit trail and allow exact rollbacks, you must create a backup snapshot **before** modifying or deleting any file, and record the action in `agent.log`.
+
+**Constraints:**
+- Never commit `agent.log` or `.agent_backups/` to Git. Keep them ignored.
+- Log mutations (`WRITE`, `MODIFY`, `REWRITE`, `DELETE`) and explicit config reads. Skip logging read operations during general source exploration.
+
+#### 1. Snapshot Rules (Pre-Action)
+Before executing any `MODIFY`, `REWRITE`, or `DELETE` action:
+1. Ensure the directory `.agent_backups/` exists.
+2. Copy the exact current version of the target file into `.agent_backups/` using the naming pattern:
+   `.agent_backups/<YYYYMMDD_HHMMSS>_<original_filename>`
+3. For nested files, replace `/` with `_` (e.g., `src-tauri/src/db.rs` → `.agent_backups/20260822_144500_src-tauri_src_db.rs`).
+
+#### 2. Log Entry Format
+Append an entry to `agent.log` after completing the operation using this structure:
+
+`[TIMESTAMP] [ACTION] [TARGET] [BACKUP: path_or_NONE] - [DETAILS]`
+
+**Action Types:**
+* `READ`: Inspecting/viewing configs or secret files. (`BACKUP: NONE`)
+* `WRITE`: Creating new files. (`BACKUP: NONE`)
+* `MODIFY`: Appending or patching existing files. (`BACKUP: path`)
+* `REWRITE`: Completely overwriting an existing file. (`BACKUP: path`)
+* `DELETE`: Deleting a file or resource. (`BACKUP: path`)
+
+#### 3. Log Examples
+
+```
+
+[2026-08-22T14:45:00Z] [READ] settings.toml [BACKUP: NONE] - Read database settings
+[2026-08-22T14:45:10Z] [WRITE] ui/src/lib/router.ts [BACKUP: NONE] - Created routing module
+[2026-08-22T14:45:18Z] [MODIFY] .env [BACKUP: .agent_backups/20260822_144517_env] - Appended REDIS_URL
+[2026-08-22T14:45:25Z] [REWRITE] README.md [BACKUP: .agent_backups/20260822_144524_README.md] - Updated docs layout
+[2026-08-22T14:45:32Z] [DELETE] temp.txt [BACKUP: .agent_backups/20260822_144531_temp.txt] - Removed temporary cache
+
+```
+
+#### 4. Rollback Instruction (When user requests revert)
+* To undo a change, locate the target entry in `agent.log`, copy the file from its specified `BACKUP` path back to `TARGET`, and log the action as `[REVERT]`.
 
 ### Operational Rules
 
@@ -79,14 +115,11 @@ Project-specific tools, paths, and conventions.
 - **Read local READMEs first**: Before editing code in a directory, check for a `README.md` in that directory (and its parents) and read it — these files capture local conventions, invariants, and entry points that aren't obvious from the code alone.
 - **Fix upstream, don't hack downstream**: When a new feature hits an existing module's limitation, flag the upstream improvement for the user's decision before proposing a downstream workaround.
 - **Library-first, custom-last**: Before writing custom code, check library/framework docs for built-in options or existing solutions. Write custom code only when no adequate alternative exists.
-- **Build with Tailwind CSS & Shadcn UI**: Use components from `@cherrystudio/ui` (located in `packages/ui`, Shadcn UI + Tailwind CSS) for every new UI component.
-- **Log centrally**: Route all logging through `loggerService` with the right context—no `console.log`.
-- **Access paths centrally**: Use `application.getPath('namespace.key', filename?)` for all main-process filesystem paths—never call `app.getPath()`, `os.homedir()`, or construct paths ad-hoc. Import the singleton via `import { application } from '@application'`.
-- **Lint, test, and format before completion**: Coding tasks are only complete after running `pnpm lint`, `pnpm test`, and `pnpm format` successfully.
+- **Build with Tailwind CSS & Shadcn UI**: Use components from `ui/src/components/ui` (shadcn/ui + Tailwind CSS v4, Radix primitives) for every new UI component.
+- **Lint, test, and format before completion**: Coding tasks are only complete after running `make check` (`cargo fmt --check` + `cargo clippy -D warnings` + `tsc -b` + `oxlint` + `cargo test`) — or the equivalent `cargo`/`npm` commands directly.
 - **Write conventional commits**: Commit small, focused changes using Conventional Commit messages (e.g., `feat(data-api):`, `fix(lifecycle):`, `refactor(quick-assistant):`, `docs(testing):`, `chore(deps):`, `test(window-manager):`). Scope must be a specific kebab-case module, never generic like `main` — when `git log` conflicts with this rule, this rule wins.
 - **Sign commits and sign off**: Every commit must be both cryptographically signed and DCO-signed off. Use `git commit -S --signoff` (not `--signoff` alone), verify the commit object contains a `gpgsig` header with `git cat-file commit HEAD`, and verify the pushed PR commits show `Verified` on GitHub.
 - **Target the right branch**: `main` is the default branch for all active development — submit features, refactors, optimizations, and fixes here.
-
 
 ## Code Commit Rules
 
@@ -104,13 +137,16 @@ Format: `<type>(<scope>): <subject>`
 - **No Co-authored-by: trailers for AI agents** — only human contributors.
 
 Examples:
+
 ```
+
 feat(data-api): add conversation pinning endpoint
 fix(lifecycle): prevent double-close on window blur
 refactor(quick-assistant): extract model selector into hook
 docs(testing): add SSE parser test fixtures
 chore(deps): update tauri to 2.0.3
 test(window-manager): add focus retention test
+
 ```
 
 ### Signing & DCO
@@ -124,29 +160,31 @@ Use both together: `git commit -S --signoff -m "..."`
 Verify before push:
 ```bash
 git cat-file commit HEAD | grep -E '^(gpgsig|Signed-off-by)'
+
 ```
 
 GitHub must show **Verified** badge on the commit.
 
 ### Branch Target
 
-- **`main`** is the only target branch for features, fixes, refactors, and optimizations.
-- No `develop`, `staging`, or release branches — everything lands on `main`.\n- Hotfixes for released versions: branch from the tag, fix, tag new patch, merge back to `main`.
+* **`main`** is the only target branch for features, fixes, refactors, and optimizations.
+* No `develop`, `staging`, or release branches — everything lands on `main`.
+* Hotfixes for released versions: branch from the tag, fix, tag new patch, merge back to `main`.
 
 ### Commit Granularity
 
-- One logical change per commit. If `git diff` shows unrelated files, split.
-- No "WIP", "fixup", "cleanup" commits in history — rewrite locally before pushing.
-- Each commit must pass `cargo test` / `npm run lint` / `npx tsc -b` individually.
+* One logical change per commit. If `git diff` shows unrelated files, split.
+* No "WIP", "fixup", "cleanup" commits in history — rewrite locally before pushing.
+* Each commit must pass `cargo test` / `npm run lint` / `npx tsc -b` individually.
 
 ### PR Requirements
 
-- PR title = commit subject (or squash-merge subject).
-- PR description: what, why, test plan, screenshots for UI changes.
-- No draft PRs without CI passing.
-- Review required: at least one approval before merge.
-- Squash-merge only — no merge commits in `main` history.
-- **No `Co-authored-by:` trailers for AI agents** — only human contributors.
+* PR title = commit subject (or squash-merge subject).
+* PR description: what, why, test plan, screenshots for UI changes.
+* No draft PRs without CI passing.
+* Review required: at least one approval before merge.
+* Squash-merge only — no merge commits in `main` history.
+* **No `Co-authored-by:` trailers for AI agents** — only human contributors.
 
 ## What this is
 
@@ -161,40 +199,50 @@ visually on Cherry Studio.
 chat_studio/
 ├── Cargo.toml              # workspace root; release profile (opt-level="z", lto, strip)
 ├── package.json            # root: just the tauri CLI, so `npm run tauri ...` works from here
+├── Makefile                # unified dev/build/test/lint commands
 ├── src-tauri/               # Rust backend
-│  ├── tauri.conf.json       # beforeDevCommand/beforeBuildCommand point into ui/
-│  └── src/
-│     ├── main.rs            # Builder setup, invoke_handler registration
-│     ├── commands.rs        # every #[tauri::command] - the whole IPC surface
-│     ├── db.rs               # rusqlite schema + queries (schema version-gated migrations)
-│     ├── config.rs          # settings.toml load/save, built-in provider presets
-│     ├── state.rs           # AppState: db handle, settings, active streams, model cache
-│     └── providers/
-│        ├── mod.rs          # `Provider` trait, StreamEvent, shared LineSplitter
-│        ├── openai_compat.rs # OpenRouter/NIM/custom - SSE parsing
-│        └── ollama.rs        # Ollama's native NDJSON dialect (not OpenAI-compatible)
+│   ├── tauri.conf.json       # beforeDevCommand/beforeBuildCommand point into ui/
+│   └── src/
+│       ├── main.rs            # Builder setup, invoke_handler registration
+│       ├── commands.rs        # every #[tauri::command] - the whole IPC surface
+│       ├── db.rs               # rusqlite schema + queries (version-gated migrations)
+│       ├── config.rs          # settings.toml load/save, built-in provider presets
+│       ├── state.rs           # AppState: db handle, settings, active streams, model cache
+│       ├── context.rs         # Conversation history preparation & token budgeting
+│       ├── themes.rs          # Theme tokens & resolution
+│       ├── providers/
+│       │   ├── mod.rs          # Provider trait, StreamEvent, LineSplitter (shared parser)
+│       │   ├── openai_compat.rs # OpenRouter / NIM / custom — SSE parsing
+│       │   ├── ollama.rs       # Ollama native NDJSON (/api/chat dialect)
+│       │   ├── anthropic.rs    # Anthropic Messages API
+│       │   ├── gemini.rs       # Google Gemini API
+│       │   └── openai.rs       # OpenAI Responses/Chat Completions API
+│       ├── mcp/               # MCP client (stdio transport, tool calling)
+│       └── skills/            # Skill execution & slash command routing
 └── ui/                       # React frontend (Vite + Node)
-   └── src/
-      ├── lib/{ipc,types,utils}.ts   # typed invoke() wrappers; types.ts mirrors Rust structs
-      ├── store/{chat,settings,theme}.ts  # zustand stores
-      ├── routes/{Chat,Settings}.tsx      # Settings is React.lazy-split in App.tsx
-      └── components/                    # Sidebar, ChatHeader, Composer, MessageBubble, ui/*
+    └── src/
+       ├── lib/{ipc,types,utils}.ts   # typed invoke() wrappers; types.ts mirrors Rust structs
+       ├── store/{chat,settings,theme}.ts  # zustand stores
+       ├── routes/{Chat,Settings}.tsx      # Settings is React.lazy-split in App.tsx
+       └── components/                    # Sidebar, ChatHeader, Composer, MessageBubble, StreamingBubble, AgentsPane, McpPane, SkillsPane, PromptsPane, MindMapPanel, ToolCallCard, ThinkingBar, ui/*
+
 ```
 
 ## Commands
 
 Use the `Makefile` (`make help` lists everything), or run directly:
 
-```
+```bash
 cd ui && npm install && cd ..    # install JS deps
 npm install                       # installs the tauri CLI at the root
 
-npm run tauri dev -- --no-watch   # dev mode (see "tauri dev is flaky" below)
+npm run tauri dev                # dev mode (see "tauri dev is flaky" below)
 npm run tauri build               # release build + installer
 
 cargo test --manifest-path src-tauri/Cargo.toml   # Rust test suite
 cd ui && npx tsc -b && npm run lint               # frontend typecheck + lint
 cd ui && npm run build                            # frontend production build only
+
 ```
 
 There is no JS test suite yet - correctness on the frontend is enforced by `tsc` +
@@ -204,12 +252,13 @@ migrations) has real unit tests in `#[cfg(test)]` blocks; add to those when touc
 
 ## Architecture notes worth knowing before changing things
 
-**Provider abstraction.** `providers::Provider` is one trait with two implementations:
+**Provider abstraction.** `providers::Provider` is one trait with five implementations:
 `OpenAiCompatProvider` (SSE, used by OpenRouter/NIM/any custom OpenAI-compatible
-endpoint) and `OllamaProvider` (newline-delimited JSON, not SSE - Ollama's own
-`/api/chat` dialect). Adding a fourth provider that's OpenAI-compatible costs zero
-Rust code - it's just another row in `Settings.providers`. A genuinely different wire
-format needs a new file next to `ollama.rs`.
+endpoint), `OllamaProvider` (newline-delimited JSON - Ollama's own `/api/chat`
+dialect), `AnthropicProvider`, `GeminiProvider`, and `OpenaiProvider`.
+Adding another OpenAI-compatible provider costs zero Rust code - it's just another
+row in `Settings.providers`. A genuinely different wire format needs a new file
+next to `ollama.rs`.
 
 **Streaming path.** Provider sends `StreamEvent::Delta` per network chunk into an
 mpsc channel. `commands::send_message`'s spawned task coalesces those into ~40ms
@@ -239,38 +288,40 @@ flash). shadcn's semantic tokens (`--primary`, `--accent`, etc.) are aliased ont
 app's own tokens (`--accent`, `--bg-elevated`, ...) in the same file - note shadcn's
 `--accent` means "subtle hover surface", not "brand color"; that's `--primary`.
 
+**Dev watcher.** `make dev` runs `tauri dev` with the file watcher enabled. If it
+crashes with exit 255 on Windows, use `make dev-stable` (Vite + binary directly,
+bypassing the tauri-cli wrapper).
+
 ## Known environment gotchas
 
-- **This project needs an MSVC C toolchain on Windows**, not MinGW - `rusqlite`
-  (bundled SQLite) and the TLS backend both compile C/C++ code via `cc`. If `cargo
-  build` fails with `gcc.exe`/`dlltool.exe` not found, the fix is installing VS Build
-  Tools' "Desktop development with C++" workload and `rustup default
-  stable-x86_64-pc-windows-msvc`, not switching dependencies.
-- **`tauri dev`'s file watcher can crash the app moments after launch** (exit code
-  255) with nothing actually wrong in the code - confirmed by running the same debug
-  binary standalone against a Vite dev server with no crash. Always pass `--no-watch`
-  first; if it's still flaky, use `make dev-stable` (Vite + the compiled binary run
-  directly, bypassing the tauri-cli wrapper entirely).
-- **RAM floor is WebView2, not the app.** An idle build measures ~350-400MB across
-  the host process + WebView2's process tree; a bare Tauri window is already
-  150-250MB before any app code runs. Don't chase a sub-100MB target by optimizing
-  frontend code - it's not where the memory is. If a hard low-RAM number is ever a
-  real requirement, that's a framework swap (Slint/egui/TUI), not a tuning pass.
-- **Node/npm tooling.** `npm install`, `npm run`, `npx` throughout. The Tauri CLI is
-  installed as `@tauri-apps/cli` via npm (prebuilt binary), not `cargo install tauri-cli`
-  (slow, and needs the same MSVC toolchain caveat above).
+* **This project needs an MSVC C toolchain on Windows**, not MinGW - `rusqlite`
+(bundled SQLite) and the TLS backend both compile C/C++ code via `cc`. If `cargo build` fails with `gcc.exe`/`dlltool.exe` not found, the fix is installing VS Build
+Tools' "Desktop development with C++" workload and `rustup default stable-x86_64-pc-windows-msvc`, not switching dependencies.
+* **`tauri dev`'s file watcher can crash the app moments after launch** (exit code
+255) with nothing actually wrong in the code - confirmed by running the same debug
+binary standalone against a Vite dev server with no crash. If it crashes, use
+`make dev-stable` (Vite + the compiled binary run directly, bypassing the
+tauri-cli wrapper entirely).
+* **RAM floor is WebView2, not the app.** An idle build measures ~350-400MB across
+the host process + WebView2's process tree; a bare Tauri window is already
+150-250MB before any app code runs. Don't chase a sub-100MB target by optimizing
+frontend code - it's not where the memory is. If a hard low-RAM number is ever a
+real requirement, that's a framework swap (Slint/egui/TUI), not a tuning pass.
+* **Node/npm tooling.** `npm install`, `npm run`, `npx` throughout. The Tauri CLI is
+installed as `@tauri-apps/cli` via npm (prebuilt binary), not `cargo install tauri-cli`
+(slow, and needs the same MSVC toolchain caveat above).
 
 ## Conventions
 
-- Provider config field names are snake_case end-to-end (Rust structs, TS types, and
-  JSON over IPC) - only Tauri **command arguments** get auto-camelCased by the
-  `#[tauri::command]` macro (e.g. Rust `conversation_id` param -> JS calls with
-  `conversationId`). Don't rename fields to camelCase thinking it's inconsistent;
-  check `ipc.ts` against `commands.rs` before assuming a mismatch is a bug.
-- Comments explain *why*, not what - the existing code leans on this deliberately in
-  non-obvious spots (coalescing, schema migrations, the empty-array selector gotcha
-  above). Match that style rather than describing what a line of code visibly does.
-- No test framework is configured for the frontend; don't add one speculatively.
-  Backend changes to `db.rs`/`providers/` should come with `#[cfg(test)]` coverage
-  matching the existing style (in-memory SQLite for db tests, fixture strings for
-  parser tests).
+* Provider config field names are snake_case end-to-end (Rust structs, TS types, and
+JSON over IPC) - only Tauri **command arguments** get auto-camelCased by the
+`#[tauri::command]` macro (e.g. Rust `conversation_id` param -> JS calls with
+`conversationId`). Don't rename fields to camelCase thinking it's inconsistent;
+check `ipc.ts` against `commands.rs` before assuming a mismatch is a bug.
+* Comments explain *why*, not what - the existing code leans on this deliberately in
+non-obvious spots (coalescing, schema migrations, the empty-array selector gotcha
+above). Match that style rather than describing what a line of code visibly does.
+* No test framework is configured for the frontend; don't add one speculatively.
+Backend changes to `db.rs`/`providers/` should come with `#[cfg(test)]` coverage
+matching the existing style (in-memory SQLite for db tests, fixture strings for
+parser tests).
